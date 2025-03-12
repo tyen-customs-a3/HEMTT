@@ -10,6 +10,14 @@ pub struct Array {
     pub(crate) span: Range<usize>,
 }
 
+impl Array {
+    /// Get a reference to the array items
+    #[must_use]
+    pub fn items(&self) -> &[Item] {
+        &self.items
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 /// An array value
 pub enum Item {

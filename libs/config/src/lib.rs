@@ -10,9 +10,14 @@ pub mod analyze;
 mod model;
 pub mod parse;
 pub mod rapify;
-pub use model::*;
+mod macros;
 
-use analyze::{Analyze, CfgPatch, ChumskyCode, LintData};
+pub use model::*;
+pub use parse::*;
+pub use rapify::*;
+pub use analyze::*;
+pub use macros::*;
+
 use chumsky::Parser;
 use hemtt_common::version::Version;
 

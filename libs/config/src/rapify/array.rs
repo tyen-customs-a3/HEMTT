@@ -45,6 +45,10 @@ impl Rapify for Item {
                 Ok(written)
             }
             Self::Invalid(_) => unreachable!(),
+            Self::Macro((_name, value, _)) => {
+                // For macros, we rapify the value since it's what will be used after expansion
+                value.rapify(output, offset)
+            }
         }
     }
 
@@ -57,6 +61,7 @@ impl Rapify for Item {
                     + usize::sum(a.iter().map(|e| e.rapified_length() + 1))
             }
             Self::Invalid(_) => unreachable!(),
+            Self::Macro((_, value, _)) => value.rapified_length()
         }
     }
 
@@ -66,6 +71,7 @@ impl Rapify for Item {
             Self::Number(n) => n.rapified_code(),
             Self::Array(_) => 3,
             Self::Invalid(_) => unreachable!(),
+            Self::Macro((_, value, _)) => value.rapified_code()
         }
     }
 }

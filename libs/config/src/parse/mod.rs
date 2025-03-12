@@ -6,12 +6,13 @@ use crate::Config;
 
 use self::property::property;
 
-mod array;
-mod ident;
-mod number;
-mod property;
-mod str;
-mod value;
+pub mod array;
+pub mod ident;
+pub mod macro_expr;
+pub mod number;
+pub mod property;
+pub mod str;
+pub mod value;
 
 /// Parse a config file.
 pub fn config() -> impl Parser<char, Config, Error = Simple<char>> {

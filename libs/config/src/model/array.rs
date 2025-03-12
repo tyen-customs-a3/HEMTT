@@ -5,14 +5,13 @@ use crate::{Number, Str};
 #[derive(Debug, Clone, PartialEq)]
 /// An array of entries
 pub struct Array {
-    pub(crate) expand: bool,
-    pub(crate) items: Vec<Item>,
-    pub(crate) span: Range<usize>,
+    pub expand: bool,
+    pub items: Vec<Item>,
+    pub span: Range<usize>,
 }
 
 impl Array {
     /// Get a reference to the array items
-    #[must_use]
     pub fn items(&self) -> &[Item] {
         &self.items
     }
@@ -27,6 +26,8 @@ pub enum Item {
     Number(Number),
     /// An array value
     Array(Vec<Item>),
+    /// A macro expression like LIST_2("item")
+    Macro((Str, Str, Range<usize>)),
     /// An invalid value
     Invalid(Range<usize>),
 }

@@ -18,20 +18,21 @@ pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
             .padded()
             .separated_by(just(',').padded())
             .allow_trailing()
-            .delimited_by(just('{').padded(), just('}').padded())
+            .delimited_by(just('{'), just('}'))
     })
     .map_with_span(move |items, span| Array {
         expand,
         items,
-        span,
+        span: span.start..span.end,
     })
 }
 
 fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
     choice((
-        super::str::string('"').map(Item::Str),
-        math().map(Item::Number),
-        super::number::number().map(Item::Number),
+        super::str::string('"').padded().map(Item::Str),
+        math().padded().map(Item::Number),
+        super::number::number().padded().map(Item::Number),
+        super::macro_expr::macro_expr().padded().map(Item::Macro),
     ))
 }
 
@@ -162,6 +163,62 @@ mod tests {
                     }),
                 ],
                 span: 0..13,
+            })
+        );
+    }
+
+    #[test]
+    fn macro_list() {
+        assert_eq!(
+            array(false).parse("{LIST_2(\"item\")}"),
+            Ok(Array {
+                expand: false,
+                items: vec![
+                    Item::Macro((
+                        crate::Str {
+                            value: "LIST_2".to_string(),
+                            span: 1..7,
+                        },
+                        crate::Str {
+                            value: "item".to_string(),
+                            span: 8..14,
+                        },
+                        1..15,
+                    )),
+                ],
+                span: 0..16,
+            })
+        );
+    }
+
+    #[test]
+    fn mixed_array() {
+        assert_eq!(
+            array(false).parse("{1, LIST_2(\"item\"), \"string\"}"),
+            Ok(Array {
+                expand: false,
+                items: vec![
+                    Item::Number(Number::Int32 {
+                        value: 1,
+                        span: 1..2,
+                    }),
+                    Item::Macro((
+                        crate::Str {
+                            value: "LIST_2".to_string(),
+                            span: 4..10,
+                        },
+                        crate::Str {
+                            value: "item".to_string(),
+                            span: 11..17,
+                        },
+                        4..18,
+                    )),
+                    Item::Str(crate::Str {
+                        value: "string".to_string(),
+                        span: 20..28,
+                    }),
+                ],
+                span: 0..29,
             })
         );
     }

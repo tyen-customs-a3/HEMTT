@@ -1,30 +1,53 @@
 use chumsky::prelude::*;
 use std::ops::Range;
 
-use crate::Str;
+#[derive(Debug, Clone, PartialEq)]
+pub enum MacroType {
+    List {
+        count: u32,
+        item: String,
+    },
+    Eval {
+        class: String,
+        expression: String,
+    },
+}
 
-pub fn macro_expr() -> impl Parser<char, (Str, Str, Range<usize>), Error = Simple<char>> {
-    let ident = text::ident();
-    let number = text::int(10);
+pub fn macro_expr() -> impl Parser<char, (MacroType, Range<usize>), Error = Simple<char>> {
+    let ident = text::ident::<char, Simple<char>>();
+    let number = text::int::<char, _>(10).map(|s: String| s.parse::<u32>().unwrap());
     
-    let macro_name = ident
-        .then(just('_').then(number).map(|(_, n)| n).or_not())
-        .map(|(name, count)| match count {
-            Some(n) => format!("{}_{}", name, n),
-            None => name,
-        })
-        .map_with_span(|name, span| Str {
-            value: name,
-            span,
+    let list_macro = just("LIST")
+        .then(just('_').ignore_then(number))
+        .then(
+            super::str::string('"')
+                .delimited_by(just('('), just(')'))
+        )
+        .map_with_span(|((_, count), arg), span| {
+            (MacroType::List {
+                count,
+                item: arg.value,
+            }, span)
         });
 
-    let macro_arg = super::str::string('"');
+    let eval_macro = just("EVAL")
+        .then(
+            super::str::string('"')
+                .then_ignore(just(',').padded())
+                .then(super::str::string('"'))
+                .delimited_by(just('('), just(')'))
+        )
+        .map_with_span(|(_, (class, expr)), span| {
+            (MacroType::Eval {
+                class: class.value,
+                expression: expr.value,
+            }, span)
+        });
 
-    macro_name
-        .then_ignore(just('('))
-        .then(macro_arg)
-        .then_ignore(just(')'))
-        .map_with_span(|(name, arg), span| (name, arg, span))
+    choice((
+        list_macro,
+        eval_macro,
+    ))
 }
 
 #[cfg(test)]
@@ -32,17 +55,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn simple_macro() {
+    fn list_macro() {
         assert_eq!(
             macro_expr().parse("LIST_2(\"item\")"),
             Ok((
-                Str {
-                    value: "LIST_2".to_string(),
-                    span: 0..6,
-                },
-                Str {
-                    value: "item".to_string(),
-                    span: 7..13,
+                MacroType::List {
+                    count: 2,
+                    item: "item".to_string(),
                 },
                 0..14,
             ))
@@ -50,20 +69,45 @@ mod tests {
     }
 
     #[test]
-    fn macro_without_number() {
+    fn list_macro_large_number() {
         assert_eq!(
-            macro_expr().parse("LIST(\"item\")"),
+            macro_expr().parse("LIST_123(\"item\")"),
             Ok((
-                Str {
-                    value: "LIST".to_string(),
-                    span: 0..4,
+                MacroType::List {
+                    count: 123,
+                    item: "item".to_string(),
                 },
-                Str {
-                    value: "item".to_string(),
-                    span: 5..11,
-                },
-                0..12,
+                0..16,
             ))
         );
+    }
+
+    #[test]
+    fn eval_macro() {
+        assert_eq!(
+            macro_expr().parse("EVAL(\"MyClass\", \"1 + 2\")"),
+            Ok((
+                MacroType::Eval {
+                    class: "MyClass".to_string(),
+                    expression: "1 + 2".to_string(),
+                },
+                0..24,
+            ))
+        );
+    }
+
+    #[test]
+    fn invalid_macro() {
+        assert!(macro_expr().parse("UNKNOWN(\"value\")").is_err());
+    }
+
+    #[test]
+    fn invalid_list_macro_no_number() {
+        assert!(macro_expr().parse("LIST(\"item\")").is_err());
+    }
+
+    #[test]
+    fn invalid_list_macro_invalid_number() {
+        assert!(macro_expr().parse("LIST_abc(\"item\")").is_err());
     }
 } 

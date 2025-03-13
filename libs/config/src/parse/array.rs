@@ -2,7 +2,7 @@ use chumsky::prelude::*;
 
 use crate::{Array, Item};
 
-use super::value::math;
+use super::{value::math, macro_expr::MacroType};
 
 pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
     recursive(|value| {
@@ -32,7 +32,32 @@ fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
         super::str::string('"').padded().map(Item::Str),
         math().padded().map(Item::Number),
         super::number::number().padded().map(Item::Number),
-        super::macro_expr::macro_expr().padded().map(Item::Macro),
+        super::macro_expr::macro_expr().padded().map(|(macro_type, span)| {
+            match macro_type {
+                MacroType::List { count, item } => Item::Macro((
+                    crate::Str {
+                        value: format!("LIST_{}", count),
+                        span: span.start..span.start + format!("LIST_{}", count).len(),
+                    },
+                    crate::Str {
+                        value: item,
+                        span: span.start + format!("LIST_{}", count).len() + 1..span.end - 1,
+                    },
+                    span,
+                )),
+                MacroType::Eval { class, expression } => Item::Eval {
+                    class: crate::Str {
+                        value: class.clone(),
+                        span: span.start + 6..span.start + 6 + class.len() + 2,
+                    },
+                    expression: crate::Str {
+                        value: expression,
+                        span: span.start + 8 + class.len() + 2..span.end - 1,
+                    },
+                    span,
+                },
+            }
+        }),
     ))
 }
 
@@ -219,6 +244,30 @@ mod tests {
                     }),
                 ],
                 span: 0..29,
+            })
+        );
+    }
+
+    #[test]
+    fn eval_macro_with_class() {
+        assert_eq!(
+            array(false).parse("{EVAL(\"MyClass\", \"1 + 2\")}"),
+            Ok(Array {
+                expand: false,
+                items: vec![
+                    Item::Eval {
+                        class: crate::Str {
+                            value: "MyClass".to_string(),
+                            span: 7..16,
+                        },
+                        expression: crate::Str {
+                            value: "1 + 2".to_string(),
+                            span: 18..24,
+                        },
+                        span: 1..25,
+                    },
+                ],
+                span: 0..26,
             })
         );
     }

@@ -136,12 +136,9 @@ impl Analyze for Value {
             Self::Str(s) => s.analyze(data, project, processed, manager),
             Self::Number(n) => n.analyze(data, project, processed, manager),
             Self::Expression(e) => e.analyze(data, project, processed, manager),
-            Self::Array(a) | Self::UnexpectedArray(a) => {
-                a.analyze(data, project, processed, manager)
-            }
-            Self::Invalid(_) => {
-                vec![]
-            }
+            Self::Array(a) => a.analyze(data, project, processed, manager),
+            Self::UnexpectedArray(a) => a.analyze(data, project, processed, manager),
+            Self::Invalid(_) => vec![],
         });
         codes
     }
@@ -190,6 +187,12 @@ impl Analyze for Item {
                 codes.extend(value.analyze(data, project, processed, manager));
                 codes
             }
+            Self::Eval { class, expression, .. } => {
+                let mut codes = vec![];
+                codes.extend(class.analyze(data, project, processed, manager));
+                codes.extend(expression.analyze(data, project, processed, manager));
+                codes
+            }
         });
         codes
     }
@@ -209,11 +212,13 @@ pub fn analyze_array(array: &Array) -> Vec<String> {
                         Item::Array(_) => {}
                         Item::Invalid(_) => {}
                         Item::Macro((_, value, _)) => result.push(value.value().to_string()),
+                        Item::Eval { expression, .. } => result.push(expression.value().to_string()),
                     }
                 }
             }
             Item::Invalid(_) => {}
             Item::Macro((_, value, _)) => result.push(value.value().to_string()),
+            Item::Eval { expression, .. } => result.push(expression.value().to_string()),
         }
     }
     result

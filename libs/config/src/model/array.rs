@@ -28,6 +28,15 @@ pub enum Item {
     Array(Vec<Item>),
     /// A macro expression like LIST_2("item")
     Macro((Str, Str, Range<usize>)),
+    /// An EVAL macro expression
+    Eval {
+        /// The class name
+        class: Str,
+        /// The expression to evaluate
+        expression: Str,
+        /// The span of the entire EVAL macro
+        span: Range<usize>,
+    },
     /// An invalid value
     Invalid(Range<usize>),
 }

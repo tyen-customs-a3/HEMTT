@@ -37,11 +37,15 @@ pub fn macro_expr() -> impl Parser<char, (MacroType, Range<usize>), Error = Simp
                 .then(super::str::string('"'))
                 .delimited_by(just('('), just(')'))
         )
-        .map_with_span(|(_, (class, expr)), span| {
-            (MacroType::Eval {
-                class: class.value,
-                expression: expr.value,
-            }, span)
+        .try_map(|(_, (class, expr)), span| {
+            if class.value.is_empty() || expr.value.is_empty() {
+                Err(Simple::custom(span, "EVAL macro arguments cannot be empty"))
+            } else {
+                Ok((MacroType::Eval {
+                    class: class.value,
+                    expression: expr.value,
+                }, span))
+            }
         });
 
     choice((
@@ -109,5 +113,30 @@ mod tests {
     #[test]
     fn invalid_list_macro_invalid_number() {
         assert!(macro_expr().parse("LIST_abc(\"item\")").is_err());
+    }
+
+    #[test]
+    fn invalid_eval_macro_missing_comma() {
+        assert!(macro_expr().parse("EVAL(\"MyClass\" \"1 + 2\")").is_err());
+    }
+
+    #[test]
+    fn invalid_eval_macro_missing_quotes() {
+        assert!(macro_expr().parse("EVAL(MyClass, \"1 + 2\")").is_err());
+    }
+
+    #[test]
+    fn invalid_eval_macro_extra_args() {
+        assert!(macro_expr().parse("EVAL(\"MyClass\", \"1 + 2\", \"extra\")").is_err());
+    }
+
+    #[test]
+    fn invalid_eval_macro_missing_args() {
+        assert!(macro_expr().parse("EVAL(\"MyClass\")").is_err());
+    }
+
+    #[test]
+    fn invalid_eval_macro_empty_args() {
+        assert!(macro_expr().parse("EVAL(\"\", \"\")").is_err());
     }
 } 

@@ -271,4 +271,76 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn invalid_eval_macro_in_array() {
+        assert_eq!(
+            array(false).parse_recovery("{EVAL(\"MyClass\" \"1 + 2\")}").0,
+            Some(Array {
+                expand: false,
+                items: vec![Item::Invalid(1..24)],
+                span: 0..25,
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_list_macro_in_array() {
+        assert_eq!(
+            array(false).parse_recovery("{LIST_abc(\"item\")}").0,
+            Some(Array {
+                expand: false,
+                items: vec![Item::Invalid(1..17)],
+                span: 0..18,
+            })
+        );
+    }
+
+    #[test]
+    fn mixed_array_with_invalid_macros() {
+        assert_eq!(
+            array(false).parse_recovery("{1, EVAL(), LIST_2, \"string\"}").0,
+            Some(Array {
+                expand: false,
+                items: vec![
+                    Item::Number(Number::Int32 {
+                        value: 1,
+                        span: 1..2,
+                    }),
+                    Item::Invalid(4..10),
+                    Item::Invalid(12..18),
+                    Item::Str(crate::Str {
+                        value: "string".to_string(),
+                        span: 20..28,
+                    }),
+                ],
+                span: 0..29,
+            })
+        );
+    }
+
+    #[test]
+    fn nested_array_with_invalid_macros() {
+        assert_eq!(
+            array(false).parse_recovery("{{1, EVAL()}, {LIST_2}, {\"string\"}}").0,
+            Some(Array {
+                expand: false,
+                items: vec![
+                    Item::Array(vec![
+                        Item::Number(Number::Int32 {
+                            value: 1,
+                            span: 2..3,
+                        }),
+                        Item::Invalid(5..11),
+                    ]),
+                    Item::Array(vec![Item::Invalid(15..21)]),
+                    Item::Array(vec![Item::Str(crate::Str {
+                        value: "string".to_string(),
+                        span: 25..33,
+                    })]),
+                ],
+                span: 0..35,
+            })
+        );
+    }
 }

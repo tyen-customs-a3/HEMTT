@@ -16,6 +16,17 @@ impl WorkspaceFile {
     fn line_start(&self, line_index: usize) -> Result<usize, files::Error> {
         use std::cmp::Ordering;
 
+        // Handle empty file case
+        if self.line_starts.is_empty() {
+            if line_index == 0 {
+                return Ok(0);
+            }
+            return Err(files::Error::LineTooLarge {
+                given: line_index,
+                max: 0,
+            });
+        }
+
         match line_index.cmp(&self.line_starts.len()) {
             Ordering::Less => Ok(*self
                 .line_starts
@@ -55,17 +66,16 @@ impl WorkspaceFiles {
             .entry(file_id.clone())
             .or_insert_with(|| {
                 let source = file_id.read_to_string().unwrap_or_default();
-                let line_starts = source
-                    .lines()
-                    .scan(0, |pos, line| {
-                        let start = *pos;
-                        *pos += line.len() + 1;
-                        Some(start)
-                    })
-                    .collect();
+                let line_starts = if source.is_empty() {
+                    vec![0]
+                } else {
+                    let mut starts = vec![0];
+                    starts.extend(source.match_indices('\n').map(|(i, _)| i + 1));
+                    starts
+                };
                 WorkspaceFile {
                     source: source.into(),
-                    line_starts,
+                    line_starts: line_starts.into(),
                 }
             })
             .clone()
@@ -91,7 +101,14 @@ impl<'files> files::Files<'files> for WorkspaceFiles {
         self.get(file_id)
             .line_starts
             .binary_search(&byte_index)
-            .or_else(|next_line| Ok(next_line - 1))
+            .map_or_else(|next_line| {
+                // If next_line is 0, we're before the first line
+                if next_line == 0 {
+                    Ok(0)
+                } else {
+                    Ok(next_line - 1)
+                }
+            }, Ok)
     }
 
     fn line_range(

@@ -26,15 +26,13 @@ pub enum Item {
     Number(Number),
     /// An array value
     Array(Vec<Item>),
-    /// A macro expression like LIST_2("item")
-    Macro((Str, Str, Range<usize>)),
-    /// An EVAL macro expression
-    Eval {
-        /// The class name
-        class: Str,
-        /// The expression to evaluate
-        expression: Str,
-        /// The span of the entire EVAL macro
+    /// A generic expression like LIST_2("item") or EVAL("class", "expression") or MACRO("name")
+    Macro {
+        /// The macro name
+        name: Str,
+        /// The arguments to the macro
+        args: Vec<Str>,
+        /// The span of the entire macro
         span: Range<usize>,
     },
     /// An invalid value

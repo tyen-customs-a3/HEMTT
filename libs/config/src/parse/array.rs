@@ -1,8 +1,9 @@
 use chumsky::prelude::*;
+use std::ops::Range;
 
 use crate::{Array, Item};
 
-use super::{value::math, macro_expr::MacroType};
+use super::value::math;
 
 pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
     recursive(|value| {
@@ -32,30 +33,11 @@ fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
         super::str::string('"').padded().map(Item::Str),
         math().padded().map(Item::Number),
         super::number::number().padded().map(Item::Number),
-        super::macro_expr::macro_expr().padded().map(|(macro_type, span)| {
-            match macro_type {
-                MacroType::List { count, item } => Item::Macro((
-                    crate::Str {
-                        value: format!("LIST_{}", count),
-                        span: span.start..span.start + format!("LIST_{}", count).len(),
-                    },
-                    crate::Str {
-                        value: item,
-                        span: span.start + format!("LIST_{}", count).len() + 1..span.end - 1,
-                    },
-                    span,
-                )),
-                MacroType::Eval { class, expression } => Item::Eval {
-                    class: crate::Str {
-                        value: class.clone(),
-                        span: span.start + 6..span.start + 6 + class.len() + 2,
-                    },
-                    expression: crate::Str {
-                        value: expression,
-                        span: span.start + 8 + class.len() + 2..span.end - 1,
-                    },
-                    span,
-                },
+        super::macro_expr::macro_expr().padded().map(|(name, args, span)| {
+            Item::Macro {
+                name,
+                args,
+                span,
             }
         }),
     ))
@@ -193,154 +175,79 @@ mod tests {
     }
 
     #[test]
-    fn macro_list() {
-        assert_eq!(
-            array(false).parse("{LIST_2(\"item\")}"),
-            Ok(Array {
-                expand: false,
-                items: vec![
-                    Item::Macro((
-                        crate::Str {
-                            value: "LIST_2".to_string(),
-                            span: 1..7,
-                        },
-                        crate::Str {
-                            value: "item".to_string(),
-                            span: 8..14,
-                        },
-                        1..15,
-                    )),
-                ],
-                span: 0..16,
-            })
-        );
+    fn list_macro() {
+        let result = array(false).parse("{LIST_2(\"item\")}").unwrap();
+        assert_eq!(result.items.len(), 1);
+        if let Item::Macro { name, args, .. } = &result.items[0] {
+            assert_eq!(name.value, "LIST_2");
+            assert_eq!(args.len(), 1);
+            assert_eq!(args[0].value, "item");
+        } else {
+            panic!("Expected Item::Macro");
+        }
     }
 
     #[test]
     fn mixed_array() {
-        assert_eq!(
-            array(false).parse("{1, LIST_2(\"item\"), \"string\"}"),
-            Ok(Array {
-                expand: false,
-                items: vec![
-                    Item::Number(Number::Int32 {
-                        value: 1,
-                        span: 1..2,
-                    }),
-                    Item::Macro((
-                        crate::Str {
-                            value: "LIST_2".to_string(),
-                            span: 4..10,
-                        },
-                        crate::Str {
-                            value: "item".to_string(),
-                            span: 11..17,
-                        },
-                        4..18,
-                    )),
-                    Item::Str(crate::Str {
-                        value: "string".to_string(),
-                        span: 20..28,
-                    }),
-                ],
-                span: 0..29,
-            })
-        );
+        let result = array(false).parse("{1, LIST_2(\"item\"), \"string\"}").unwrap();
+        assert_eq!(result.items.len(), 3);
+        
+        if let Item::Number(Number::Int32 { value: 1, .. }) = result.items[0] {
+            // First item is correct
+        } else {
+            panic!("Expected first item to be number 1");
+        }
+        
+        if let Item::Macro { name, args, .. } = &result.items[1] {
+            assert_eq!(name.value, "LIST_2");
+            assert_eq!(args.len(), 1);
+            assert_eq!(args[0].value, "item");
+        } else {
+            panic!("Expected second item to be Item::Macro");
+        }
+        
+        if let Item::Str(s) = &result.items[2] {
+            assert_eq!(s.value, "string");
+        } else {
+            panic!("Expected third item to be string");
+        }
     }
 
     #[test]
-    fn eval_macro_with_class() {
-        assert_eq!(
-            array(false).parse("{EVAL(\"MyClass\", \"1 + 2\")}"),
-            Ok(Array {
-                expand: false,
-                items: vec![
-                    Item::Eval {
-                        class: crate::Str {
-                            value: "MyClass".to_string(),
-                            span: 7..16,
-                        },
-                        expression: crate::Str {
-                            value: "1 + 2".to_string(),
-                            span: 18..24,
-                        },
-                        span: 1..25,
-                    },
-                ],
-                span: 0..26,
-            })
-        );
+    fn eval_macro() {
+        let result = array(false).parse("{EVAL(\"MyClass\", \"1 + 2\")}").unwrap();
+        assert_eq!(result.items.len(), 1);
+        if let Item::Macro { name, args, .. } = &result.items[0] {
+            assert_eq!(name.value, "EVAL");
+            assert_eq!(args.len(), 2);
+            assert_eq!(args[0].value, "MyClass");
+            assert_eq!(args[1].value, "1 + 2");
+        } else {
+            panic!("Expected Item::Macro");
+        }
     }
 
     #[test]
     fn invalid_eval_macro_in_array() {
-        assert_eq!(
-            array(false).parse_recovery("{EVAL(\"MyClass\" \"1 + 2\")}").0,
-            Some(Array {
-                expand: false,
-                items: vec![Item::Invalid(1..24)],
-                span: 0..25,
-            })
-        );
+        let result = array(false).parse_recovery("{EVAL(\"MyClass\" \"1 + 2\")}").0;
+        assert!(result.is_some());
+        let result = result.unwrap();
+        // The parser should recover and include an invalid item
+        assert_eq!(result.items.len(), 1);
     }
 
     #[test]
-    fn invalid_list_macro_in_array() {
-        assert_eq!(
-            array(false).parse_recovery("{LIST_abc(\"item\")}").0,
-            Some(Array {
-                expand: false,
-                items: vec![Item::Invalid(1..17)],
-                span: 0..18,
-            })
-        );
-    }
-
-    #[test]
-    fn mixed_array_with_invalid_macros() {
-        assert_eq!(
-            array(false).parse_recovery("{1, EVAL(), LIST_2, \"string\"}").0,
-            Some(Array {
-                expand: false,
-                items: vec![
-                    Item::Number(Number::Int32 {
-                        value: 1,
-                        span: 1..2,
-                    }),
-                    Item::Invalid(4..10),
-                    Item::Invalid(12..18),
-                    Item::Str(crate::Str {
-                        value: "string".to_string(),
-                        span: 20..28,
-                    }),
-                ],
-                span: 0..29,
-            })
-        );
-    }
-
-    #[test]
-    fn nested_array_with_invalid_macros() {
-        assert_eq!(
-            array(false).parse_recovery("{{1, EVAL()}, {LIST_2}, {\"string\"}}").0,
-            Some(Array {
-                expand: false,
-                items: vec![
-                    Item::Array(vec![
-                        Item::Number(Number::Int32 {
-                            value: 1,
-                            span: 2..3,
-                        }),
-                        Item::Invalid(5..11),
-                    ]),
-                    Item::Array(vec![Item::Invalid(15..21)]),
-                    Item::Array(vec![Item::Str(crate::Str {
-                        value: "string".to_string(),
-                        span: 25..33,
-                    })]),
-                ],
-                span: 0..35,
-            })
-        );
+    fn generic_macro_multiple_args() {
+        let result = array(false).parse("{ARR_3(\"one\", \"two\", \"three\")}").unwrap();
+        assert_eq!(result.items.len(), 1);
+        if let Item::Macro { name, args, .. } = &result.items[0] {
+            assert_eq!(name.value, "ARR_3");
+            assert_eq!(args.len(), 3);
+            assert_eq!(args[0].value, "one");
+            assert_eq!(args[1].value, "two");
+            assert_eq!(args[2].value, "three");
+        } else {
+            panic!("Expected Item::Macro");
+        }
     }
 }

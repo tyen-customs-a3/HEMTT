@@ -64,6 +64,7 @@ supports-hyperlinks = "3.1.0"
 tabled = "0.18.0"
 terminal-link = "0.1.0"
 thiserror = "2.0.12"
+tempfile = "3.10.0"
 toml = "0.8.20"
 tower-lsp = "0.20.0"
 tracing = { version = "0.1.41", features = ["attributes"] }

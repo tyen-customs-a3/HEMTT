@@ -181,16 +181,12 @@ impl Analyze for Item {
                 .flat_map(|i| i.analyze(data, project, processed, manager))
                 .collect::<Vec<_>>(),
             Self::Invalid(_) => vec![],
-            Self::Macro((name, value, _)) => {
+            Self::Macro { name, args, .. } => {
                 let mut codes = vec![];
                 codes.extend(name.analyze(data, project, processed, manager));
-                codes.extend(value.analyze(data, project, processed, manager));
-                codes
-            }
-            Self::Eval { class, expression, .. } => {
-                let mut codes = vec![];
-                codes.extend(class.analyze(data, project, processed, manager));
-                codes.extend(expression.analyze(data, project, processed, manager));
+                for arg in args {
+                    codes.extend(arg.analyze(data, project, processed, manager));
+                }
                 codes
             }
         });
@@ -211,14 +207,22 @@ pub fn analyze_array(array: &Array) -> Vec<String> {
                         Item::Number(n) => result.push(n.to_string()),
                         Item::Array(_) => {}
                         Item::Invalid(_) => {}
-                        Item::Macro((_, value, _)) => result.push(value.value().to_string()),
-                        Item::Eval { expression, .. } => result.push(expression.value().to_string()),
+                        Item::Macro { args, .. } => {
+                            // For macros, add the first argument's value (if available)
+                            if let Some(first_arg) = args.first() {
+                                result.push(first_arg.value.clone());
+                            }
+                        }
                     }
                 }
             }
             Item::Invalid(_) => {}
-            Item::Macro((_, value, _)) => result.push(value.value().to_string()),
-            Item::Eval { expression, .. } => result.push(expression.value().to_string()),
+            Item::Macro { args, .. } => {
+                // For macros, add the first argument's value (if available)
+                if let Some(first_arg) = args.first() {
+                    result.push(first_arg.value.clone());
+                }
+            }
         }
     }
     result
@@ -263,17 +267,17 @@ mod tests {
                         span: 11..17,
                     }),
                 ]),
-                Item::Macro((
-                    Str {
+                Item::Macro {
+                    name: Str {
                         value: "LIST_2".to_string(),
                         span: 19..25,
                     },
-                    Str {
-                        value: "macro".to_string(),
+                    args: vec![Str {
+                        value: "macro".to_string(), 
                         span: 26..31,
-                    },
-                    19..31,
-                )),
+                    }],
+                    span: 19..31,
+                },
             ],
             span: 0..33,
         };

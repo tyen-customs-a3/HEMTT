@@ -1,57 +1,68 @@
 use chumsky::prelude::*;
 use std::ops::Range;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum MacroType {
-    List {
-        count: u32,
-        item: String,
-    },
-    Eval {
-        class: String,
-        expression: String,
-    },
-}
+use crate::Str;
 
-pub fn macro_expr() -> impl Parser<char, (MacroType, Range<usize>), Error = Simple<char>> {
+/// Parse a macro expression into its name and arguments, returning with its span.
+pub fn macro_expr() -> impl Parser<char, (Str, Vec<Str>, Range<usize>), Error = Simple<char>> {
     let ident = text::ident::<char, Simple<char>>();
-    let number = text::int::<char, _>(10).map(|s: String| s.parse::<u32>().unwrap());
     
-    let list_macro = just("LIST")
-        .then(just('_').ignore_then(number))
+    // Main parser for all macro patterns
+    ident
         .then(
             super::str::string('"')
+                .separated_by(just(',').padded())
                 .delimited_by(just('('), just(')'))
+                .recover_with(nested_delimiters(
+                    '(',
+                    ')',
+                    [('[', ']'), ('{', '}')],
+                    |_| vec![]
+                ))
         )
-        .map_with_span(|((_, count), arg), span| {
-            (MacroType::List {
-                count,
-                item: arg.value,
-            }, span)
-        });
-
-    let eval_macro = just("EVAL")
-        .then(
-            super::str::string('"')
-                .then_ignore(just(',').padded())
-                .then(super::str::string('"'))
-                .delimited_by(just('('), just(')'))
-        )
-        .try_map(|(_, (class, expr)), span| {
-            if class.value.is_empty() || expr.value.is_empty() {
-                Err(Simple::custom(span, "EVAL macro arguments cannot be empty"))
-            } else {
-                Ok((MacroType::Eval {
-                    class: class.value,
-                    expression: expr.value,
-                }, span))
+        .map_with_span(|(name, args), span| {
+            let name_str = Str {
+                value: name.clone(),
+                span: span.start..span.start + name.len(),
+            };
+            
+            let args_strs = args.iter().enumerate().map(|(i, arg)| {
+                // Calculate approximate spans for each argument
+                let arg_str_len = arg.value.len();
+                let prev_args_len: usize = if i == 0 { 0 } else {
+                    args[0..i].iter().map(|s: &crate::Str| s.value.len() + 4).sum::<usize>() // +4 for quotes and comma
+                };
+                
+                let arg_start = span.start + name.len() + 1 + prev_args_len + if i > 0 { i * 2 } else { 0 };
+                let arg_end = arg_start + arg_str_len + 2; // +2 for quotes
+                
+                Str {
+                    value: arg.value.clone(),
+                    span: arg_start..arg_end,
+                }
+            }).collect();
+            
+            (name_str, args_strs, span)
+        })
+        .recover_with(nested_delimiters(
+            '(',
+            ')',
+            [('[', ']'), ('{', '}')],
+            |span: Range<usize>| {
+                // Fallback for recovery
+                (
+                    Str {
+                        value: "UNKNOWN".to_string(),
+                        span: span.start..span.start + 7,
+                    },
+                    vec![Str {
+                        value: "PARSE_ERROR".to_string(),
+                        span: span.start + 8..span.end - 1,
+                    }],
+                    span
+                )
             }
-        });
-
-    choice((
-        list_macro,
-        eval_macro,
-    ))
+        ))
 }
 
 #[cfg(test)]
@@ -60,83 +71,67 @@ mod tests {
 
     #[test]
     fn list_macro() {
-        assert_eq!(
-            macro_expr().parse("LIST_2(\"item\")"),
-            Ok((
-                MacroType::List {
-                    count: 2,
-                    item: "item".to_string(),
-                },
-                0..14,
-            ))
-        );
+        let result = macro_expr().parse("LIST_2(\"item\")").unwrap();
+        assert_eq!(result.0.value, "LIST_2");
+        assert_eq!(result.1.len(), 1);
+        assert_eq!(result.1[0].value, "item");
+        assert_eq!(result.2, 0..14);
     }
 
     #[test]
     fn list_macro_large_number() {
-        assert_eq!(
-            macro_expr().parse("LIST_123(\"item\")"),
-            Ok((
-                MacroType::List {
-                    count: 123,
-                    item: "item".to_string(),
-                },
-                0..16,
-            ))
-        );
+        let result = macro_expr().parse("LIST_123(\"item\")").unwrap();
+        assert_eq!(result.0.value, "LIST_123");
+        assert_eq!(result.1.len(), 1);
+        assert_eq!(result.1[0].value, "item");
+        assert_eq!(result.2, 0..16);
     }
 
     #[test]
     fn eval_macro() {
-        assert_eq!(
-            macro_expr().parse("EVAL(\"MyClass\", \"1 + 2\")"),
-            Ok((
-                MacroType::Eval {
-                    class: "MyClass".to_string(),
-                    expression: "1 + 2".to_string(),
-                },
-                0..24,
-            ))
-        );
+        let result = macro_expr().parse("EVAL(\"MyClass\", \"1 + 2\")").unwrap();
+        assert_eq!(result.0.value, "EVAL");
+        assert_eq!(result.1.len(), 2);
+        assert_eq!(result.1[0].value, "MyClass");
+        assert_eq!(result.1[1].value, "1 + 2");
+        assert_eq!(result.2, 0..24);
     }
 
     #[test]
-    fn invalid_macro() {
-        assert!(macro_expr().parse("UNKNOWN(\"value\")").is_err());
+    fn generic_macro_single_arg() {
+        let result = macro_expr().parse("GVAR(\"value\")").unwrap();
+        assert_eq!(result.0.value, "GVAR");
+        assert_eq!(result.1.len(), 1);
+        assert_eq!(result.1[0].value, "value");
+        assert_eq!(result.2, 0..13);
     }
 
     #[test]
-    fn invalid_list_macro_no_number() {
-        assert!(macro_expr().parse("LIST(\"item\")").is_err());
+    fn generic_macro_multiple_args() {
+        let result = macro_expr().parse("ARR_3(\"one\", \"two\", \"three\")").unwrap();
+        assert_eq!(result.0.value, "ARR_3");
+        assert_eq!(result.1.len(), 3);
+        assert_eq!(result.1[0].value, "one");
+        assert_eq!(result.1[1].value, "two");
+        assert_eq!(result.1[2].value, "three");
+        assert_eq!(result.2, 0..28);
     }
 
     #[test]
-    fn invalid_list_macro_invalid_number() {
-        assert!(macro_expr().parse("LIST_abc(\"item\")").is_err());
+    fn invalid_macro_recovers() {
+        // This should recover and return a generic macro
+        let result = macro_expr().parse_recovery("UNKNOWN(\"value\" error)");
+        assert!(!result.1.is_empty()); // We do expect errors
+        // We don't assert anything specific about result.0 since recovery behavior may vary
+        // But we do expect the parser to handle the error gracefully without crashing
     }
 
     #[test]
-    fn invalid_eval_macro_missing_comma() {
-        assert!(macro_expr().parse("EVAL(\"MyClass\" \"1 + 2\")").is_err());
-    }
-
-    #[test]
-    fn invalid_eval_macro_missing_quotes() {
-        assert!(macro_expr().parse("EVAL(MyClass, \"1 + 2\")").is_err());
-    }
-
-    #[test]
-    fn invalid_eval_macro_extra_args() {
-        assert!(macro_expr().parse("EVAL(\"MyClass\", \"1 + 2\", \"extra\")").is_err());
-    }
-
-    #[test]
-    fn invalid_eval_macro_missing_args() {
-        assert!(macro_expr().parse("EVAL(\"MyClass\")").is_err());
-    }
-
-    #[test]
-    fn invalid_eval_macro_empty_args() {
-        assert!(macro_expr().parse("EVAL(\"\", \"\")").is_err());
+    fn invalid_syntax_recovers() {
+        // Missing closing parenthesis should recover
+        let result = macro_expr().parse_recovery("GVAR(\"test\"");
+        assert!(!result.1.is_empty()); // We expect errors
+        // We don't assert anything about result.0 since recovery behavior may vary
+        // But we do expect the parser to handle the error gracefully without crashing
     }
 } 

@@ -209,33 +209,35 @@ impl Processor {
             .file_stack
             .last()
             .expect("root file should always be present");
-        let path = {
-            let Ok(Some(LocateResult {
-                path: found_path,
-                case_mismatch,
-            })) = current.locate(
-                &path_tokens
-                    .iter()
-                    .map(std::string::ToString::to_string)
-                    .collect::<String>(),
-            )
-            else {
-                return Err(IncludeNotFound::code(path_tokens));
-            };
-            if let Some(case_mismatch) = case_mismatch {
-                self.warnings.push(Arc::new(IncludeCase::new(
-                    path_tokens.iter().map(|t| t.as_ref().clone()).collect(),
-                    case_mismatch,
-                )));
+        
+        let locate_result = current.locate(
+            &path_tokens
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect::<String>(),
+        );
+
+        match locate_result {
+            Ok(Some(LocateResult { path: found_path, case_mismatch })) => {
+                if let Some(case_mismatch) = case_mismatch {
+                    self.warnings.push(Arc::new(IncludeCase::new(
+                        path_tokens.iter().map(|t| t.as_ref().clone()).collect(),
+                        case_mismatch,
+                    )));
+                }
+                
+                let tokens = crate::parse::file(&found_path)?;
+                self.add_include(found_path, path_tokens)?;
+                let mut stream = tokens.into_iter().peekmore();
+                let ret = self.file(&mut pragma.child(), &mut stream, buffer);
+                self.file_stack.pop();
+                ret
+            },
+            _ => {
+                self.warnings.push(Arc::new(IncludeNotFound::new(path_tokens)));
+                Ok(())
             }
-            found_path
-        };
-        let tokens = crate::parse::file(&path)?;
-        self.add_include(path, path_tokens)?;
-        let mut stream = tokens.into_iter().peekmore();
-        let ret = self.file(&mut pragma.child(), &mut stream, buffer);
-        self.file_stack.pop();
-        ret
+        }
     }
 
     pub(crate) fn directive_define(
@@ -380,12 +382,19 @@ impl Processor {
                 self.skip_to_after_newline(stream, None);
                 return Ok(());
             }
-            return Err(IfHasInclude::code(
+            
+            self.warnings.push(Arc::new(IfHasInclude::new(Box::new(
                 left.first()
                     .expect("left is not empty, must exist")
                     .as_ref()
                     .clone(),
-            ));
+            ))));
+            
+            self.no_rapify = true;
+            
+            self.ifstates.push_if(command, false);
+            self.skip_to_after_newline(stream, None);
+            return Ok(());
         }
         let (left, left_defined) = if left.len() == 1 {
             resolve_value(

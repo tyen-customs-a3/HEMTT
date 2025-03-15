@@ -132,4 +132,17 @@ mod tests {
         // This test should be updated if we enhance the implementation
         assert!(!defines.is_empty());
     }
+
+    #[test]
+    fn include_directive() {
+        let input = "#include \"\\z\\ace\\addons\\main\\script_mod.hpp\"";
+        let defines = parse_defines(input);
+        
+        assert_eq!(defines.len(), 1);
+        if let Define::Include { path, .. } = &defines[0] {
+            assert_eq!(path, "\\z\\ace\\addons\\main\\script_mod.hpp");
+        } else {
+            panic!("Expected Include directive");
+        }
+    }
 } 

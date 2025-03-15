@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use hemtt_workspace::reporting::{Code, Token};
+use hemtt_workspace::reporting::{Code, Token, Severity};
 
 use crate::Error;
 
@@ -34,6 +34,10 @@ impl Code for IfHasInclude {
 
     fn help(&self) -> Option<String> {
         Some(String::from("use `#pragma hemtt flag pe23_ignore_has_include`\nto have HEMTT act as if the include was not found.\nThis will still prevent HEMTT from rapifying the file\nbut will allow the false branch to be validated."))
+    }
+    
+    fn severity(&self) -> Severity {
+        Severity::Warning
     }
 }
 

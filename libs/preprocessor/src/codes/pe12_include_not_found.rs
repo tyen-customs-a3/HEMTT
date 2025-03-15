@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use hemtt_workspace::reporting::{Code, Diagnostic, Label, Token};
+use hemtt_workspace::reporting::{Code, Diagnostic, Label, Severity, Token};
 
 use crate::Error;
 
@@ -36,6 +36,10 @@ impl Code for IncludeNotFound {
                 .with_message(self.label_message()),
             ),
         )
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
     }
 }
 

@@ -31,22 +31,28 @@ pub enum Define {
         /// The span of the macro
         span: Range<usize>,
     },
+    /// An include directive in the form of `#include "path/to/file"`
+    Include {
+        /// The path to the include file
+        path: String,
+        /// The span of the include
+        span: Range<usize>,
+    },
 }
 
 impl Define {
     /// Get the name of the define
-    #[must_use]
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> Option<&str> {
         match self {
-            Self::Simple { name, .. } | Self::Macro { name, .. } => name,
+            Self::Simple { name, .. } | Self::Macro { name, .. } => Some(name),
+            Self::Include { .. } => None, // Include directives don't have a name in the same sense
         }
     }
 
     /// Get the span of the define
-    #[must_use]
-    pub fn span(&self) -> Range<usize> {
+    pub fn span(&self) -> &Range<usize> {
         match self {
-            Self::Simple { span, .. } | Self::Macro { span, .. } => span.clone(),
+            Self::Simple { span, .. } | Self::Macro { span, .. } | Self::Include { span, .. } => span,
         }
     }
 } 

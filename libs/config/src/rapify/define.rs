@@ -10,33 +10,44 @@ impl Rapify for Define {
         output: &mut O,
         _offset: usize,
     ) -> Result<usize, std::io::Error> {
-        // Defines are not rapified directly as they are preprocessor directives
-        // We just write them as a comment in their string form
         let define_str = match self {
-            Self::Simple { name, value, .. } => format!("#define {name} {value}"),
-            Self::Macro { name, params, body, .. } => {
-                let params_str = params.join(",");
-                format!("#define {name}({params_str}) {body}")
+            Define::Simple { name, value, .. } => {
+                format!("#define {name} {value}")
+            }
+            Define::Macro {
+                name, params, body, ..
+            } => {
+                format!(
+                    "#define {name}({}) {body}",
+                    params.join(", "),
+                )
+            },
+            Define::Include { path, .. } => {
+                format!("#include \"{}\"", path)
             }
         };
-        
-        output.write_cstring(&define_str)?;
+        output.write_all(define_str.as_bytes())?;
+        output.write_all(b"\n")?;
         Ok(define_str.len() + 1)
     }
 
     fn rapified_length(&self) -> usize {
-        // Calculate the length of the string representation
         match self {
-            Self::Simple { name, value, .. } => {
-                // #define NAME VALUE + null terminator
-                9 + name.len() + 1 + value.len() + 1
+            Define::Simple { name, value, .. } => {
+                format!("#define {name} {value}").len() + 1 // +1 for newline
             }
-            Self::Macro { name, params, body, .. } => {
-                // #define NAME(PARAM1,PARAM2,...) BODY + null terminator
-                9 + name.len() + 1 + 
-                params.iter().map(|p| p.len()).sum::<usize>() + 
-                params.len().saturating_sub(1) + 2 + // commas and parentheses
-                body.len() + 1
+            Define::Macro {
+                name, params, body, ..
+            } => {
+                format!(
+                    "#define {name}({}) {body}",
+                    params.join(", "),
+                )
+                .len()
+                    + 1 // +1 for newline
+            },
+            Define::Include { path, .. } => {
+                format!("#include \"{}\"", path).len() + 1 // +1 for newline
             }
         }
     }

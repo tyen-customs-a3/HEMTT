@@ -1,6 +1,7 @@
 mod array;
 mod class;
 mod config;
+mod define;
 mod expression;
 mod ident;
 pub mod number;
@@ -12,6 +13,7 @@ pub use self::str::Str;
 pub use array::{Array, Item};
 pub use class::Class;
 pub use config::Config;
+pub use define::Define;
 pub use expression::Expression;
 pub use ident::Ident;
 pub use number::Number;

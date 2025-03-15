@@ -63,7 +63,7 @@ pub fn parse(
                 default_enabled,
             )?;
             let localizations = Arc::new(Mutex::new(vec![]));
-            let codes = config.analyze(
+            let codes = config.to_class().analyze(
                 &LintData {
                     path: String::new(),
                     localizations: localizations.clone(),
@@ -163,5 +163,11 @@ impl ConfigReport {
     /// Get the localized strings
     pub fn localized(&self) -> &[(String, Position)] {
         &self.localized
+    }
+    
+    #[must_use]
+    /// Get the defines
+    pub fn defines(&self) -> &[Define] {
+        &self.config.1
     }
 }

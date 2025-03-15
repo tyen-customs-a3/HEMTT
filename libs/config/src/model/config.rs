@@ -1,17 +1,35 @@
 use hemtt_common::version::Version;
 
-use crate::{Class, Number, Property, Value, analyze::CfgPatch};
+use crate::{Class, Define, Number, Property, Value, analyze::CfgPatch};
 
 #[derive(Clone, Debug, PartialEq)]
 /// A config file
-pub struct Config(pub Vec<Property>);
+pub struct Config(pub Vec<Property>, pub Vec<Define>);
 
 impl Config {
+    /// Create a new config
+    #[must_use]
+    pub fn new(properties: Vec<Property>, defines: Vec<Define>) -> Self {
+        Self(properties, defines)
+    }
+
     #[must_use]
     pub fn to_class(&self) -> Class {
         Class::Root {
             properties: self.0.clone(),
         }
+    }
+    
+    /// Get the properties in the config
+    #[must_use]
+    pub fn properties(&self) -> &[Property] {
+        &self.0
+    }
+    
+    /// Get the defines in the config
+    #[must_use]
+    pub fn get_defines(&self) -> &[Define] {
+        &self.1
     }
 }
 

@@ -3,6 +3,7 @@
 mod array;
 mod class;
 mod config;
+mod define;
 mod expression;
 mod number;
 mod property;

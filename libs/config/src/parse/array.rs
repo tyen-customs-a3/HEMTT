@@ -3,6 +3,7 @@ use chumsky::prelude::*;
 use crate::{Array, Item};
 
 use super::value::math;
+use super::macro_expr;
 
 pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
     recursive(|value| {
@@ -30,6 +31,7 @@ pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
 fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
     choice((
         super::str::string('"').map(Item::Str),
+        super::macro_expr::macro_expr().map(Item::Macro),
         math().map(Item::Number),
         super::number::number().map(Item::Number),
     ))

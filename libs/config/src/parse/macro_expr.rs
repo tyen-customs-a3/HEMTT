@@ -44,11 +44,12 @@ pub fn macro_expr() -> impl Parser<char, MacroExpression, Error = Simple<char>> 
                     .repeated()
                     .collect::<String>()
             )
-            .then_ignore(just('"'));
+            .then_ignore(just('"'))
+            .map(|s| format!("\"{}\"", s));
             
         choice((
             quoted_string.map(|s| Str {
-                value: s.trim().to_string(),
+                value: s,
                 span: 0..0 // Updated by parent parser
             }),
             nested_macro.map(|m| Str {
@@ -102,7 +103,7 @@ mod tests {
         let result = macro_expr().parse("LIST_2(\"item\")").unwrap();
         assert_eq!(result.name.value, "LIST_2");
         assert_eq!(result.args.len(), 1);
-        assert_eq!(result.args[0].value, "item");
+        assert_eq!(result.args[0].value, r#""item""#);
     }
 
     #[test]
@@ -144,8 +145,8 @@ mod tests {
         let result = macro_expr().parse("FUNC(\"hello\", \"world\")").unwrap();
         assert_eq!(result.name.value, "FUNC");
         assert_eq!(result.args.len(), 2);
-        assert_eq!(result.args[0].value, "hello");
-        assert_eq!(result.args[1].value, "world");
+        assert_eq!(result.args[0].value, r#""hello""#);
+        assert_eq!(result.args[1].value, r#""world""#);
     }
 
     #[test]

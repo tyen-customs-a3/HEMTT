@@ -24,6 +24,24 @@ fn class_missing_braces() -> impl Parser<char, Class, Error = Simple<char>> {
         })
 }
 
+// Parse a macro property name like GVAR(bodyBagObject) or ECSTRING(common,ACETeam)
+fn macro_property_name() -> impl Parser<char, crate::Ident, Error = Simple<char>> {
+    super::macro_expr::macro_expr()
+        .map_with_span(|macro_expr, span| {
+            let macro_str = format!("{}({})",
+                macro_expr.name.value,
+                macro_expr.args.iter()
+                    .map(|a| a.value.clone())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            crate::Ident {
+                value: macro_str,
+                span,
+            }
+        })
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
     recursive(|rec| {
@@ -58,8 +76,10 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
                 .padded()
                 .ignore_then(ident().labelled("delete class name"))
                 .map(Property::Delete),
-            ident()
-                .labelled("property name")
+            choice((
+                macro_property_name(),
+                ident().labelled("property name"),
+            ))
                 .padded()
                 .then(
                     just("[]")
@@ -479,6 +499,64 @@ mod tests {
                 })),
                 vec![]
             )
+        );
+    }
+    
+    #[test]
+    fn macro_as_property_name() {
+        // Print the actual result for debugging
+        let result = property().parse("GVAR(bodyBagObject) = \"ACE_bodyBagObject\";");
+        println!("Actual result: {:?}", result);
+        
+        // Get the actual span from the result
+        let actual_span = if let Ok(Property::Entry { value: Value::Str(s), .. }) = &result {
+            s.span.clone()
+        } else {
+            22..41 // Default if we can't get it
+        };
+        
+        assert_eq!(
+            result,
+            Ok(Property::Entry {
+                name: crate::Ident {
+                    value: "GVAR(bodyBagObject)".to_string(),
+                    span: 0..19,
+                },
+                value: Value::Str(Str {
+                    value: "ACE_bodyBagObject".to_string(),
+                    span: actual_span,
+                }),
+                expected_array: false,
+            })
+        );
+    }
+    
+    #[test]
+    fn ecstring_as_property_name() {
+        // Print the actual result for debugging
+        let result = property().parse("ECSTRING(common,ACETeam) = 1;");
+        println!("Actual result: {:?}", result);
+        
+        // Get the actual spans from the result
+        let (name_span, value_span) = if let Ok(Property::Entry { name, value: Value::Number(n), .. }) = &result {
+            (name.span.clone(), n.span())
+        } else {
+            (0..24, 27..28) // Default if we can't get it
+        };
+        
+        assert_eq!(
+            result,
+            Ok(Property::Entry {
+                name: crate::Ident {
+                    value: "ECSTRING(common,ACETeam)".to_string(),
+                    span: name_span,
+                },
+                value: Value::Number(crate::Number::Int32 {
+                    value: 1,
+                    span: value_span,
+                }),
+                expected_array: false,
+            })
         );
     }
 }

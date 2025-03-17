@@ -25,7 +25,7 @@ lint_manager!(config, vec![]);
 pub use cfgpatch::CfgPatch;
 pub use chumsky::ChumskyCode;
 
-use crate::{Array, Class, Config, Expression, Item, Number, Property, Str, Value};
+use crate::{Array, Class, Config, Expression, Item, Number, Property, Str, Value, MacroExpression};
 
 /// Trait for rapifying objects
 pub trait Analyze: Sized + 'static {
@@ -138,7 +138,7 @@ impl Analyze for Value {
             Self::Array(a) | Self::UnexpectedArray(a) => {
                 a.analyze(data, project, processed, manager)
             }
-            Self::Macro(_) => vec![],
+            Self::Macro(m) => m.analyze(data, project, processed, manager),
             Self::Invalid(_) => vec![],
         });
         codes
@@ -177,14 +177,33 @@ impl Analyze for Item {
         codes.extend(match self {
             Self::Str(s) => s.analyze(data, project, processed, manager),
             Self::Number(n) => n.analyze(data, project, processed, manager),
+            Self::Macro(m) => m.analyze(data, project, processed, manager),
             Self::Array(a) => a
                 .iter()
                 .flat_map(|i| i.analyze(data, project, processed, manager))
                 .collect::<Vec<_>>(),
-            Self::Invalid(_) => {
-                vec![]
-            }
+            Self::Invalid(_) => vec![],
         });
+        codes
+    }
+}
+
+impl Analyze for MacroExpression {
+    fn analyze(
+        &self,
+        data: &LintData,
+        project: Option<&ProjectConfig>,
+        processed: &Processed,
+        manager: &LintManager<LintData>,
+    ) -> Codes {
+        let mut codes = vec![];
+        codes.extend(manager.run(data, project, Some(processed), self));
+        // Analyze macro arguments
+        codes.extend(
+            self.args
+                .iter()
+                .flat_map(|arg| arg.analyze(data, project, processed, manager)),
+        );
         codes
     }
 }

@@ -29,6 +29,7 @@ impl Rapify for Property {
                 },
                 Self::Delete(_) => 0,
                 Self::MissingSemicolon(_, _) => unreachable!(),
+                Self::Enum(_) => unreachable!(),
             }
     }
 }
@@ -60,6 +61,7 @@ impl Property {
                 vec![4]
             }
             Self::MissingSemicolon(_, _) => unreachable!(),
+            Self::Enum(_) => unreachable!(),
         }
     }
 }

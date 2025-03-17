@@ -107,15 +107,10 @@ impl Analyze for Property {
         let mut codes = vec![];
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
-            Self::Entry { value, .. } => {
-                let data = LintData {
-                    path: format!("{}.{}", data.path, self.name().value),
-                    localizations: data.localizations.clone(),
-                };
-                value.analyze(&data, project, processed, manager)
-            }
-            Self::Class(c) => c.analyze(data, project, processed, manager),
+            Self::Class(class) => class.analyze(data, project, processed, manager),
+            Self::Entry { .. } => vec![],
             Self::Delete(_) | Self::MissingSemicolon(_, _) => vec![],
+            Self::Enum(_) => vec![],
         });
         codes
     }

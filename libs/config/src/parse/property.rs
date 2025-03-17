@@ -1,6 +1,6 @@
 use chumsky::prelude::*;
 
-use crate::{Class, Property, Value};
+use crate::{Class, Property, Value, EnumDef};
 
 use super::{ident::ident, value::value};
 
@@ -42,10 +42,56 @@ fn macro_property_name() -> impl Parser<char, crate::Ident, Error = Simple<char>
         })
 }
 
+// Parse an enum definition
+fn enum_def() -> impl Parser<char, Property, Error = Simple<char>> {
+    just("enum")
+        .padded()
+        .ignore_then(
+            recursive(|_rec| {
+                choice((
+                    macro_property_name(),
+                    ident().labelled("enum value name"),
+                ))
+                .padded()
+                .then(
+                    just('=')
+                        .padded()
+                        .ignore_then(
+                            value()
+                                .recover_with(skip_until([';', ','], Value::Invalid))
+                                .padded()
+                                .labelled("enum value"),
+                        )
+                        .map(|value| (value, false)),
+                )
+                .map(|(name, (value, expected_array))| Property::Entry {
+                    name,
+                    value,
+                    expected_array,
+                })
+                .separated_by(just(',').padded())
+                .at_least(1)
+                .padded()
+                .delimited_by(just('{'), just('}'))
+            })
+        )
+        .then(just(';').padded())
+        .map_with_span(|(properties, _), span| {
+            Property::Enum(EnumDef {
+                name: crate::Ident {
+                    value: "enum".to_string(),
+                    span: span.clone(),
+                },
+                properties,
+                span,
+            })
+        })
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
-    recursive(|rec| {
-        let properties = rec
+    recursive(|_rec| {
+        let properties = _rec
             .labelled("class property")
             .padded()
             .repeated()
@@ -76,6 +122,7 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
                 .padded()
                 .ignore_then(ident().labelled("delete class name"))
                 .map(Property::Delete),
+            enum_def(),
             choice((
                 macro_property_name(),
                 ident().labelled("property name"),
@@ -95,14 +142,11 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
                                         .labelled("array value")
                                         .recover_with(skip_until([';'], Value::Invalid)),
                                 )
+                                .map(|value| (value, true))
                                 .or(just("+=")
                                     .padded()
                                     .ignore_then(super::array::array(true).map(Value::Array))
-                                    .or(value())
-                                    .padded()
-                                    .labelled("array expand value"))
-                                .recover_with(skip_until([';'], Value::Invalid))
-                                .map(|value| (value, true)),
+                                    .map(|value| (value, true))),
                         )
                         .or(just('=')
                             .padded()
@@ -558,5 +602,69 @@ mod tests {
                 expected_array: false,
             })
         );
+    }
+    
+    #[test]
+    fn enum_parsing() {
+        // Test parsing an enum
+        let enum_text = r#"enum {
+            destructengine = 2,
+            destructdefault = 6,
+            destructwreck = 7,
+            destructtree = 3,
+            destructtent = 4,
+            stabilizedinaxisx = 1,
+            stabilizedinaxesxyz = 4,
+            stabilizedinaxisy = 2,
+            stabilizedinaxesboth = 3,
+            destructno = 0,
+            stabilizedinaxesnone = 0,
+            destructman = 5,
+            destructbuilding = 1
+        };"#;
+        
+        let result = enum_def().parse(enum_text);
+        println!("Enum parsing result: {:?}", result);
+        
+        // Check that the result is a Property::Enum with the correct properties
+        if let Ok(Property::Enum(EnumDef { properties, .. })) = &result {
+            assert_eq!(properties.len(), 13);
+            
+            // Check a few specific enum values
+            let destructengine = properties.iter().find(|p| {
+                if let Property::Entry { name, .. } = p {
+                    name.value == "destructengine"
+                } else {
+                    false
+                }
+            });
+            assert!(destructengine.is_some());
+            if let Some(Property::Entry { value, .. }) = destructengine {
+                if let Value::Number(crate::Number::Int32 { value, .. }) = value {
+                    assert_eq!(*value, 2);
+                } else {
+                    panic!("Expected Int32 value for destructengine");
+                }
+            }
+            
+            // Check stabilizedinaxesnone
+            let stabilizedinaxesnone = properties.iter().find(|p| {
+                if let Property::Entry { name, .. } = p {
+                    name.value == "stabilizedinaxesnone"
+                } else {
+                    false
+                }
+            });
+            assert!(stabilizedinaxesnone.is_some());
+            if let Some(Property::Entry { value, .. }) = stabilizedinaxesnone {
+                if let Value::Number(crate::Number::Int32 { value, .. }) = value {
+                    assert_eq!(*value, 0);
+                } else {
+                    panic!("Expected Int32 value for stabilizedinaxesnone");
+                }
+            }
+        } else {
+            panic!("Failed to parse enum or incorrect result type");
+        }
     }
 }

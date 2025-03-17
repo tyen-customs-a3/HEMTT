@@ -44,21 +44,21 @@ impl Rapify for Class {
                         Property::Entry { value, .. } => {
                             written += value.rapify(output, offset)?;
                         }
-                        Property::Class(c) => {
-                            if let Self::Local { .. } = c {
+                        Property::Class(class) => {
+                            if let Self::Local { .. } = class {
                                 output.write_u32::<LittleEndian>(class_offset as u32)?;
                                 written += 4;
-                                let buffer: Box<[u8]> =
-                                    vec![0; c.rapified_length()].into_boxed_slice();
+                                let buffer: Box<[u8]> = vec![0; class.rapified_length()].into_boxed_slice();
                                 let mut cursor = Cursor::new(buffer);
-                                let body_size = c.rapify(&mut cursor, class_offset)?;
-                                assert_eq!(body_size, c.rapified_length());
+                                let body_size = class.rapify(&mut cursor, class_offset)?;
+                                assert_eq!(body_size, class.rapified_length());
                                 class_offset += body_size;
                                 class_bodies.push(cursor);
                             }
                         }
                         Property::Delete(_) => continue,
                         Property::MissingSemicolon(_, _) => unreachable!(),
+                        Property::Enum(_) => unreachable!(), // Enums should be preprocessed before rapification
                     }
                     assert_eq!(
                         written - pre_write,

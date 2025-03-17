@@ -1653,6 +1653,8 @@ dependencies = [
  "linkme",
  "lsp-types 0.97.0",
  "paste",
+ "regex",
+ "tempfile",
  "toml 0.8.20",
  "vfs",
 ]

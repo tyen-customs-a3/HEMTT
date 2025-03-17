@@ -170,6 +170,8 @@ impl Parse for Symbol {
             Rule::underscore => Self::Underscore,
             Rule::left_parentheses => Self::LeftParenthesis,
             Rule::right_parentheses => Self::RightParenthesis,
+            Rule::left_brace => Self::LeftBrace,
+            Rule::right_brace => Self::RightBrace,
             Rule::join => Self::Join,
             Rule::directive => Self::Directive,
             Rule::escape => Self::Escape,
@@ -179,9 +181,9 @@ impl Parse for Symbol {
             Rule::left_angle => Self::LeftAngle,
             Rule::right_angle => Self::RightAngle,
             Rule::equals => Self::Equals,
-
+            Rule::enum_keyword => Self::Enum,
+            Rule::semicolon => Self::Semicolon,
             Rule::unicode => Self::Unicode(pair.as_str().to_string()),
-
             Rule::newline => Self::Newline,
             Rule::space => Self::Whitespace(Whitespace::Space),
             Rule::tab => Self::Whitespace(Whitespace::Tab),

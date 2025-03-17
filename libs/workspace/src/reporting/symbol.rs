@@ -78,6 +78,9 @@ pub enum Symbol {
 
     /// End of input
     Eoi,
+
+    /// Enum
+    Enum,
 }
 
 impl Symbol {
@@ -204,6 +207,21 @@ impl Symbol {
             _ => None,
         }
     }
+
+    #[must_use]
+    pub const fn is_left_brace(&self) -> bool {
+        matches!(self, Self::LeftBrace)
+    }
+
+    #[must_use]
+    pub const fn is_right_brace(&self) -> bool {
+        matches!(self, Self::RightBrace)
+    }
+
+    #[must_use]
+    pub const fn is_semicolon(&self) -> bool {
+        matches!(self, Self::Semicolon)
+    }
 }
 
 impl Display for Symbol {
@@ -248,6 +266,7 @@ impl Display for Symbol {
                 Self::Newline => "\n",
                 Self::Eoi | Self::Comment(_) => "",
                 Self::Alpha(_) | Self::Digit(_) | Self::Whitespace(_) => unreachable!(),
+                Self::Enum => "Enum",
             }
         )
     }

@@ -8,6 +8,7 @@ mod property;
 mod str;
 mod value;
 mod macro_expr;
+mod enum_def;
 
 pub use self::str::Str;
 pub use array::{Array, Item};
@@ -19,3 +20,4 @@ pub use number::Number;
 pub use property::Property;
 pub use value::Value;
 pub use macro_expr::MacroExpression;
+pub use enum_def::EnumDef;

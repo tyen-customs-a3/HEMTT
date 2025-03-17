@@ -8,7 +8,7 @@ use hemtt_workspace::{
 };
 use peekmore::{PeekMore, PeekMoreIterator};
 
-use crate::codes::pe3_expected_ident::ExpectedIdent;
+use crate::codes::{pe1_unexpected_token::UnexpectedToken, pe3_expected_ident::ExpectedIdent};
 use crate::codes::pw2_invalid_config_case::InvalidConfigCase;
 use crate::codes::{
     pe2_unexpected_eof::UnexpectedEOF, pe26_unsupported_builtin::BuiltInNotSupported,
@@ -227,6 +227,11 @@ impl Processor {
                 (Symbol::Whitespace(_), _) => {
                     self.output(stream.next().expect("peeked above"), buffer);
                 }
+                (Symbol::Enum, false) => {
+                    just_whitespace = false;
+                    self.output(stream.next().expect("peeked above"), buffer);
+                    self.process_enum(stream, buffer)?;
+                }
                 (_, _) => {
                     just_whitespace = false;
                     self.output(stream.next().expect("peeked above"), buffer);
@@ -319,6 +324,89 @@ impl Processor {
         }
         self.file_stack.push(path.clone());
         self.included_files.push(path);
+        Ok(())
+    }
+
+    fn process_enum(
+        &mut self,
+        stream: &mut PeekMoreIterator<impl Iterator<Item = Arc<Token>>>,
+        buffer: &mut Vec<Output>,
+    ) -> Result<(), Error> {
+        // Skip whitespace after 'enum'
+        self.skip_whitespace(stream, Some(buffer));
+
+        // Expect opening brace
+        if let Some(token) = stream.peek() {
+            if !token.symbol().is_left_brace() {
+                return Err(UnexpectedToken::code(
+                    token.as_ref().clone(),
+                    vec!["{".to_string()],
+                ));
+            }
+            self.output(stream.next().expect("peeked above"), buffer);
+        }
+
+        // Process enum values
+        while let Some(token) = stream.peek() {
+            match token.symbol() {
+                Symbol::RightBrace => {
+                    self.output(stream.next().expect("peeked above"), buffer);
+                    break;
+                }
+                Symbol::Word(_) => {
+                    // Process enum value
+                    self.output(stream.next().expect("peeked above"), buffer);
+                    self.skip_whitespace(stream, Some(buffer));
+
+                    // Expect equals sign
+                    if let Some(token) = stream.peek() {
+                        if !token.symbol().is_equals() {
+                            return Err(UnexpectedToken::code(
+                                token.as_ref().clone(),
+                                vec!["=".to_string()],
+                            ));
+                        }
+                        self.output(stream.next().expect("peeked above"), buffer);
+                    }
+
+                    // Process value
+                    self.skip_whitespace(stream, Some(buffer));
+                    while let Some(token) = stream.peek() {
+                        if token.symbol().is_comma() || token.symbol().is_right_brace() {
+                            break;
+                        }
+                        self.output(stream.next().expect("peeked above"), buffer);
+                        self.skip_whitespace(stream, Some(buffer));
+                    }
+
+                    // Handle comma
+                    if let Some(token) = stream.peek() {
+                        if token.symbol().is_comma() {
+                            self.output(stream.next().expect("peeked above"), buffer);
+                            self.skip_whitespace(stream, Some(buffer));
+                        }
+                    }
+                }
+                Symbol::Whitespace(_) => {
+                    self.output(stream.next().expect("peeked above"), buffer);
+                }
+                _ => {
+                    return Err(UnexpectedToken::code(
+                        token.as_ref().clone(),
+                        vec!["}".to_string(), "identifier".to_string()],
+                    ));
+                }
+            }
+        }
+
+        // Expect semicolon
+        self.skip_whitespace(stream, Some(buffer));
+        if let Some(token) = stream.peek() {
+            if token.symbol().is_semicolon() {
+                self.output(stream.next().expect("peeked above"), buffer);
+            }
+        }
+
         Ok(())
     }
 }

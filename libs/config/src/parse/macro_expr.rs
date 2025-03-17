@@ -4,26 +4,15 @@ use std::ops::Range;
 use crate::{Str, MacroExpression};
 
 /// Parse a macro name that can include numbers (e.g., LIST_2, LIST_10)
-fn macro_name() -> impl Parser<char, String, Error = Simple<char>> {
-    let ident_part = filter(|c: &char| c.is_ascii_alphabetic() || *c == '_')
-        .repeated()
-        .at_least(1)
-        .collect::<String>();
+pub fn macro_name() -> impl Parser<char, String, Error = Simple<char>> {
+    let ident_char = filter(|c: &char| c.is_ascii_alphabetic() || *c == '_');
+    let ident_rest = filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_');
     
-    let number_part = text::int(10)
-        .map(|s: String| s);
-        
-    ident_part
-        .then(just('_').to(String::from("_")).or_not())
-        .then(number_part.or_not())
-        .map(|((base, underscore), number)| {
-            let mut name = base;
-            if let Some(us) = underscore {
-                name.push_str(&us);
-            }
-            if let Some(num) = number {
-                name.push_str(&num);
-            }
+    ident_char
+        .then(ident_rest.repeated())
+        .map(|(first, rest)| {
+            let mut name = first.to_string();
+            name.extend(rest);
             name
         })
 }
@@ -32,9 +21,12 @@ fn macro_name() -> impl Parser<char, String, Error = Simple<char>> {
 pub fn macro_expr() -> impl Parser<char, MacroExpression, Error = Simple<char>> {
     // Parse macro arguments recursively to handle nested macros
     let arg = recursive(|arg| {
-        let raw_text = filter(|c: &char| !matches!(*c, ',' | '(' | ')' | '"'))
-            .repeated()
-            .collect::<String>();
+        let raw_text = filter(|c: &char| {
+            // Allow most characters except those that would break the macro syntax
+            !matches!(*c, ',' | '(' | ')' | '"' | ';' | '{' | '}' | '[' | ']')
+        })
+        .repeated()
+        .collect::<String>();
             
         let nested_macro = macro_call(arg.clone());
             
@@ -69,8 +61,11 @@ pub fn macro_expr() -> impl Parser<char, MacroExpression, Error = Simple<char>> 
         ))
     });
 
-    // Main macro call parser
-    macro_call(arg)
+    // Handle both standalone macros and macro calls
+    macro_call(arg.or_not().map(|opt| opt.unwrap_or_else(|| Str {
+        value: String::new(),
+        span: 0..0
+    })))
 }
 
 /// Parse a macro call with its arguments

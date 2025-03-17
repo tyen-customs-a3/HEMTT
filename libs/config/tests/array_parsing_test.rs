@@ -1,10 +1,60 @@
-use std::sync::Arc;
-use hemtt_preprocessor::Processor;
-use hemtt_workspace::{LayerType, Workspace, reporting::WorkspaceFiles};
-use hemtt_common::config::PDriveOption;
-use std::path::PathBuf;
 use hemtt_config::{Class, Property, Value, Item, Config};
-use tempfile::tempdir;
+
+mod parse_helpers {
+    use super::*;
+    use std::sync::Arc;
+    use hemtt_preprocessor::Processor;
+    use hemtt_workspace::{LayerType, Workspace, reporting::WorkspaceFiles};
+    use hemtt_common::config::PDriveOption;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    pub fn parse_config(content: &str) -> Result<Config, Vec<Arc<dyn hemtt_workspace::reporting::Code>>> {
+        let temp_dir = tempdir().expect("Failed to create temp directory");
+        let temp_path = PathBuf::from(temp_dir.path());
+        
+        let workspace = Workspace::builder()
+            .physical(&temp_path, LayerType::Source)
+            .finish(None, false, &PDriveOption::Disallow)
+            .unwrap();
+
+        let temp_file = temp_dir.path().join("test.hpp");
+        std::fs::write(&temp_file, content).unwrap();
+
+        let source = workspace.join("test.hpp").unwrap();
+        let processed = Processor::run(&source).unwrap();
+        println!("\nProcessed output:\n{}", processed.as_str());
+        
+        let parsed = hemtt_config::parse(None, &processed);
+        let workspacefiles = WorkspaceFiles::new();
+
+        // Print diagnostic output
+        match parsed {
+            Ok(config) => {
+                if !config.codes().is_empty() {
+                    println!("\nWarnings/Notes:");
+                    for code in config.codes() {
+                        if let Some(diag) = code.diagnostic() {
+                            println!("{}", diag.to_string(&workspacefiles));
+                        }
+                    }
+                }
+                Ok(config.into_config())
+            }
+            Err(errors) => {
+                println!("\nErrors:");
+                for error in &errors {
+                    if let Some(diag) = error.diagnostic() {
+                        println!("{}", diag.to_string(&workspacefiles));
+                    }
+                }
+                Err(errors)
+            }
+        }
+    }
+}
+
+use parse_helpers::parse_config;
 
 #[test]
 fn test_simple_array() {
@@ -94,49 +144,4 @@ fn test_array_expansion_with_macros() {
     "#;
     let result = parse_config(config);
     assert!(result.is_ok(), "Failed to parse array expansion with macros");
-}
-
-// Helper function to parse config and print diagnostics
-fn parse_config(content: &str) -> Result<Config, Vec<Arc<dyn hemtt_workspace::reporting::Code>>> {
-    let temp_dir = tempdir().expect("Failed to create temp directory");
-    let temp_path = PathBuf::from(temp_dir.path());
-    
-    let workspace = Workspace::builder()
-        .physical(&temp_path, LayerType::Source)
-        .finish(None, false, &PDriveOption::Disallow)
-        .unwrap();
-
-    let temp_file = temp_dir.path().join("test.hpp");
-    std::fs::write(&temp_file, content).unwrap();
-
-    let source = workspace.join("test.hpp").unwrap();
-    let processed = Processor::run(&source).unwrap();
-    println!("\nProcessed output:\n{}", processed.as_str());
-    
-    let parsed = hemtt_config::parse(None, &processed);
-    let workspacefiles = WorkspaceFiles::new();
-
-    // Print diagnostic output
-    match parsed {
-        Ok(config) => {
-            if !config.codes().is_empty() {
-                println!("\nWarnings/Notes:");
-                for code in config.codes() {
-                    if let Some(diag) = code.diagnostic() {
-                        println!("{}", diag.to_string(&workspacefiles));
-                    }
-                }
-            }
-            Ok(config.into_config())
-        }
-        Err(errors) => {
-            println!("\nErrors:");
-            for error in &errors {
-                if let Some(diag) = error.diagnostic() {
-                    println!("{}", diag.to_string(&workspacefiles));
-                }
-            }
-            Err(errors)
-        }
-    }
 } 

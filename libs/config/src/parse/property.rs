@@ -26,17 +26,37 @@ fn class_missing_braces() -> impl Parser<char, Class, Error = Simple<char>> {
 
 // Parse a macro property name like GVAR(bodyBagObject) or ECSTRING(common,ACETeam)
 fn macro_property_name() -> impl Parser<char, crate::Ident, Error = Simple<char>> {
-    super::macro_expr::macro_expr()
-        .map_with_span(|macro_expr, span| {
-            let macro_str = format!("{}({})",
-                macro_expr.name.value,
-                macro_expr.args.iter()
+    let macro_name = super::macro_expr::macro_name();
+    let macro_arg = recursive(|arg| {
+        choice((
+            // Handle nested macros
+            super::macro_expr::macro_expr().map(|m| format!("{}({})", 
+                m.name.value,
+                m.args.iter()
                     .map(|a| a.value.clone())
                     .collect::<Vec<_>>()
                     .join(",")
-            );
+            )),
+            // Handle quoted strings
+            super::str::string('"').map(|s| s.value),
+            // Handle numbers and other characters
+            filter(|c: &char| !matches!(*c, ',' | ')'))
+                .repeated()
+                .collect::<String>()
+        ))
+    });
+        
+    let macro_args = macro_arg
+        .separated_by(just(','))
+        .allow_trailing()
+        .delimited_by(just('('), just(')'))
+        .map(|args| args.join(","));
+
+    macro_name
+        .then(macro_args)
+        .map_with_span(|(name, args), span| {
             crate::Ident {
-                value: macro_str,
+                value: format!("{}({})", name, args),
                 span,
             }
         })
@@ -103,6 +123,7 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
             .ignore_then(ident().padded().labelled("class name"))
             .padded()
             .map(|ident| Class::External { name: ident });
+
         let class_local = just("class ")
             .padded()
             .ignore_then(ident().padded().labelled("class name"))
@@ -115,7 +136,9 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
                 properties,
                 err_missing_braces: false,
             });
+
         let class = choice((class_local, class_missing_braces(), class_external));
+
         choice((
             class.map(Property::Class),
             just("delete ")
@@ -123,6 +146,7 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
                 .ignore_then(ident().labelled("delete class name"))
                 .map(Property::Delete),
             enum_def(),
+            // Handle property assignments first
             choice((
                 macro_property_name(),
                 ident().labelled("property name"),
@@ -162,6 +186,14 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
                     name,
                     value,
                     expected_array,
+                }),
+            // Then handle standalone macros, but only if they're not followed by = or []
+            macro_property_name()
+                .then_ignore(none_of("=[").rewind())
+                .map_with_span(|name, span| Property::Entry {
+                    name,
+                    value: Value::Invalid(span),
+                    expected_array: false,
                 }),
         ))
         .then(just(';').padded().or_not())

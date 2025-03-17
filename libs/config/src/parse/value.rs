@@ -9,9 +9,9 @@ pub fn value() -> impl Parser<char, Value, Error = Simple<char>> {
         eval().map(Value::Expression),
         super::array::array(false).map(Value::UnexpectedArray),
         super::str::string('"').map(Value::Str),
-        super::macro_expr::macro_expr().map(Value::Macro),
         math().map(Value::Number),
         super::number::number().map(Value::Number),
+        super::macro_expr::macro_expr().map(Value::Macro),
     ))
 }
 

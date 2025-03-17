@@ -31,9 +31,16 @@ pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
 fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
     choice((
         super::str::string('"').map(Item::Str),
-        super::macro_expr::macro_expr().map(Item::Macro),
         math().map(Item::Number),
         super::number::number().map(Item::Number),
+        super::macro_expr::macro_expr().map(Item::Macro),
+    ))
+    .recover_with(skip_parser(
+        none_of("},")
+            .padded()
+            .repeated()
+            .at_least(1)
+            .map_with_span(|_, span| Item::Invalid(span)),
     ))
 }
 

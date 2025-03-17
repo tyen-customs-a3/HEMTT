@@ -45,19 +45,6 @@ impl Rapify for Item {
                 Ok(written)
             }
             Self::Invalid(_) => unreachable!(),
-            Self::Macro { args, .. } => {
-                // For macros, we rapify the first argument as the value
-                // since it's what will be used after expansion
-                if let Some(first_arg) = args.first() {
-                    first_arg.rapify(output, offset)
-                } else {
-                    // If there are no arguments, return a default string
-                    crate::Str {
-                        value: String::new(),
-                        span: 0..0,
-                    }.rapify(output, offset)
-                }
-            }
         }
     }
 
@@ -70,16 +57,6 @@ impl Rapify for Item {
                     + usize::sum(a.iter().map(|e| e.rapified_length() + 1))
             }
             Self::Invalid(_) => unreachable!(),
-            Self::Macro { args, .. } => {
-                if let Some(first_arg) = args.first() {
-                    first_arg.rapified_length()
-                } else {
-                    crate::Str {
-                        value: String::new(),
-                        span: 0..0,
-                    }.rapified_length()
-                }
-            }
         }
     }
 
@@ -89,17 +66,6 @@ impl Rapify for Item {
             Self::Number(n) => n.rapified_code(),
             Self::Array(_) => 3,
             Self::Invalid(_) => unreachable!(),
-            Self::Macro { args, .. } => {
-                if let Some(first_arg) = args.first() {
-                    first_arg.rapified_code()
-                } else {
-                    // Default to string code if no arguments
-                    crate::Str {
-                        value: String::new(),
-                        span: 0..0,
-                    }.rapified_code()
-                }
-            }
         }
     }
 }

@@ -19,6 +19,7 @@ impl Rapify for Property {
                     Value::Number(n) => n.rapified_length(),
                     Value::Expression(e) => e.rapified_length(),
                     Value::Array(a) => a.rapified_length(),
+                    Value::Macro(m) => m.rapified_length(),
                     Value::UnexpectedArray(_) | Value::Invalid(_) => unreachable!(),
                 },
                 Self::Class(c) => match c {
@@ -48,6 +49,7 @@ impl Property {
                         vec![2]
                     }
                 }
+                Value::Macro(m) => vec![1, m.rapified_code()],
                 Value::UnexpectedArray(_) | Value::Invalid(_) => unreachable!(),
             },
             Self::Class(c) => match c {

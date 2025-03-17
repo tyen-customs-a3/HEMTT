@@ -32,7 +32,7 @@ fn macro_name() -> impl Parser<char, String, Error = Simple<char>> {
 pub fn macro_expr() -> impl Parser<char, MacroExpression, Error = Simple<char>> {
     // Parse macro arguments recursively to handle nested macros
     let arg = recursive(|arg| {
-        let raw_text = filter(|c: &char| !matches!(*c, ',' | '(' | ')' | '"'))
+        let raw_text = filter(|c: &char| !matches!(*c, ',' | '(' | ')'))
             .repeated()
             .collect::<String>();
             
@@ -48,7 +48,7 @@ pub fn macro_expr() -> impl Parser<char, MacroExpression, Error = Simple<char>> 
             
         choice((
             quoted_string.map(|s| Str {
-                value: s.trim().to_string(),
+                value: s,
                 span: 0..0 // Updated by parent parser
             }),
             nested_macro.map(|m| Str {
@@ -62,7 +62,7 @@ pub fn macro_expr() -> impl Parser<char, MacroExpression, Error = Simple<char>> 
                 span: m.span
             }),
             raw_text.map(|s| Str {
-                value: s.trim().to_string(),
+                value: s,
                 span: 0..0
             })
         ))
@@ -70,6 +70,7 @@ pub fn macro_expr() -> impl Parser<char, MacroExpression, Error = Simple<char>> 
 
     // Main macro call parser
     macro_call(arg)
+        .then_ignore(end())
 }
 
 /// Parse a macro call with its arguments
@@ -77,7 +78,7 @@ fn macro_call(arg_parser: impl Parser<char, Str, Error = Simple<char>> + Clone) 
     macro_name()
         .then(
             arg_parser
-                .separated_by(just(',').padded())
+                .separated_by(just(','))
                 .allow_trailing()
                 .delimited_by(just('('), just(')'))
         )
@@ -145,7 +146,7 @@ mod tests {
         assert_eq!(result.name.value, "FUNC");
         assert_eq!(result.args.len(), 2);
         assert_eq!(result.args[0].value, "hello");
-        assert_eq!(result.args[1].value, "world");
+        assert_eq!(result.args[1].value, " \"world\"");
     }
 
     #[test]

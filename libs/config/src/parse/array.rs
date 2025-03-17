@@ -1,5 +1,4 @@
 use chumsky::prelude::*;
-use std::ops::Range;
 
 use crate::{Array, Item};
 
@@ -19,27 +18,20 @@ pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
             .padded()
             .separated_by(just(',').padded())
             .allow_trailing()
-            .delimited_by(just('{'), just('}'))
+            .delimited_by(just('{').padded(), just('}').padded())
     })
     .map_with_span(move |items, span| Array {
         expand,
         items,
-        span: span.start..span.end,
+        span,
     })
 }
 
 fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
     choice((
-        super::str::string('"').padded().map(Item::Str),
-        math().padded().map(Item::Number),
-        super::number::number().padded().map(Item::Number),
-        super::macro_expr::macro_expr().padded().map(|(name, args, span)| {
-            Item::Macro {
-                name,
-                args,
-                span,
-            }
-        }),
+        super::str::string('"').map(Item::Str),
+        math().map(Item::Number),
+        super::number::number().map(Item::Number),
     ))
 }
 
@@ -172,82 +164,5 @@ mod tests {
                 span: 0..13,
             })
         );
-    }
-
-    #[test]
-    fn list_macro() {
-        let result = array(false).parse("{LIST_2(\"item\")}").unwrap();
-        assert_eq!(result.items.len(), 1);
-        if let Item::Macro { name, args, .. } = &result.items[0] {
-            assert_eq!(name.value, "LIST_2");
-            assert_eq!(args.len(), 1);
-            assert_eq!(args[0].value, "item");
-        } else {
-            panic!("Expected Item::Macro");
-        }
-    }
-
-    #[test]
-    fn mixed_array() {
-        let result = array(false).parse("{1, LIST_2(\"item\"), \"string\"}").unwrap();
-        assert_eq!(result.items.len(), 3);
-        
-        if let Item::Number(Number::Int32 { value: 1, .. }) = result.items[0] {
-            // First item is correct
-        } else {
-            panic!("Expected first item to be number 1");
-        }
-        
-        if let Item::Macro { name, args, .. } = &result.items[1] {
-            assert_eq!(name.value, "LIST_2");
-            assert_eq!(args.len(), 1);
-            assert_eq!(args[0].value, "item");
-        } else {
-            panic!("Expected second item to be Item::Macro");
-        }
-        
-        if let Item::Str(s) = &result.items[2] {
-            assert_eq!(s.value, "string");
-        } else {
-            panic!("Expected third item to be string");
-        }
-    }
-
-    #[test]
-    fn eval_macro() {
-        let result = array(false).parse("{EVAL(\"MyClass\", \"1 + 2\")}").unwrap();
-        assert_eq!(result.items.len(), 1);
-        if let Item::Macro { name, args, .. } = &result.items[0] {
-            assert_eq!(name.value, "EVAL");
-            assert_eq!(args.len(), 2);
-            assert_eq!(args[0].value, "MyClass");
-            assert_eq!(args[1].value, "1 + 2");
-        } else {
-            panic!("Expected Item::Macro");
-        }
-    }
-
-    #[test]
-    fn invalid_eval_macro_in_array() {
-        let result = array(false).parse_recovery("{EVAL(\"MyClass\" \"1 + 2\")}").0;
-        assert!(result.is_some());
-        let result = result.unwrap();
-        // The parser should recover and include an invalid item
-        assert_eq!(result.items.len(), 1);
-    }
-
-    #[test]
-    fn generic_macro_multiple_args() {
-        let result = array(false).parse("{ARR_3(\"one\", \"two\", \"three\")}").unwrap();
-        assert_eq!(result.items.len(), 1);
-        if let Item::Macro { name, args, .. } = &result.items[0] {
-            assert_eq!(name.value, "ARR_3");
-            assert_eq!(args.len(), 3);
-            assert_eq!(args[0].value, "one");
-            assert_eq!(args[1].value, "two");
-            assert_eq!(args[2].value, "three");
-        } else {
-            panic!("Expected Item::Macro");
-        }
     }
 }

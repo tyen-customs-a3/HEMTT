@@ -1,21 +1,21 @@
 mod array;
 mod class;
 mod config;
-mod define;
 mod expression;
 mod ident;
 pub mod number;
 mod property;
 mod str;
 mod value;
+mod macro_expr;
 
 pub use self::str::Str;
 pub use array::{Array, Item};
 pub use class::Class;
 pub use config::Config;
-pub use define::Define;
 pub use expression::Expression;
 pub use ident::Ident;
 pub use number::Number;
 pub use property::Property;
 pub use value::Value;
+pub use macro_expr::MacroExpression;

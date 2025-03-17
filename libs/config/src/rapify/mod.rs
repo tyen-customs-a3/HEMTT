@@ -3,12 +3,12 @@
 mod array;
 mod class;
 mod config;
-mod define;
 mod expression;
 mod number;
 mod property;
 mod str;
 mod value;
+mod macro_expr;
 
 use std::io::Write;
 

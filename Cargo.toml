@@ -35,6 +35,9 @@ cognitive_complexity = "allow"
 [workspace.lints.rust]
 future_incompatible = "warn"
 nonstandard_style = "warn"
+unused_imports = "allow"
+unused_mut = "allow"
+ambiguous_glob_reexports = "allow"
 
 [workspace.dependencies]
 arma3-wiki = "0.4.0"

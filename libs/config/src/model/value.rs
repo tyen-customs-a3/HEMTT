@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use super::{Array, Expression, Number, Str};
+use super::{Array, Expression, Number, Str, MacroExpression};
 
 #[derive(Debug, Clone, PartialEq)]
 /// A value in a config file
@@ -26,6 +26,11 @@ pub enum Value {
     /// my_array[] = {1,2,3};
     /// ```
     Array(Array),
+    /// A macro expression
+    /// ```cpp
+    /// my_macro = MACRO(arg1, arg2);
+    /// ```
+    Macro(MacroExpression),
     /// An unexpected array value
     /// This is used when an array is found where it is not expected
     ///
@@ -46,6 +51,7 @@ impl Value {
             Self::Number(n) => n.span(),
             Self::Expression(e) => e.span.clone(),
             Self::Array(a) | Self::UnexpectedArray(a) => a.span.clone(),
+            Self::Macro(m) => m.span.clone(),
             Self::Invalid(span) => span.clone(),
         }
     }

@@ -105,13 +105,13 @@ fn duplicate_properties_inner(
                 );
                 let entry = seen
                     .entry(format!("{}.{}", scope, name.value.to_lowercase()))
-                    .or_insert_with(Vec::new);
+                    .or_default();
                 entry.push((true, name.clone()));
             }
             Property::Entry { name, .. } | Property::MissingSemicolon(name, _) => {
                 let entry = seen
                     .entry(format!("{}.{}", scope, name.value.to_lowercase()))
-                    .or_insert_with(Vec::new);
+                    .or_default();
                 entry.push((false, name.clone()));
             }
             _ => (),

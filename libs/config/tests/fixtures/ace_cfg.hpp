@@ -22,12 +22,12 @@ class CfgWeapons {
 
     class ACE_fieldDressing: ACE_ItemCore {
         scope = 2;
-        author = "ACE-Team";
-        model = "data\bandage.p3d";
-        picture = "ui\fieldDressing_ca.paa";
-        displayName = "Field Dressing";
-        descriptionShort = "Basic bandage for wounds";
-        descriptionUse = "Used for basic treatment";
+        author = ECSTRING(common,ACETeam);
+        model = QPATHTOF(data\bandage.p3d);
+        picture = QPATHTOF(ui\fieldDressing_ca.paa);
+        displayName = CSTRING(Bandage_Basic_Display);
+        descriptionShort = CSTRING(Bandage_Basic_Desc_Short);
+        descriptionUse = CSTRING(Bandage_Basic_Desc_Use);
         ACE_isMedicalItem = 1;
         class ItemInfo: CBA_MiscItem_ItemInfo {
             mass = 0.6;
@@ -35,12 +35,12 @@ class CfgWeapons {
     };
     class ACE_packingBandage: ACE_ItemCore {
         scope = 2;
-        author = "ACE-Team";
-        displayName = "Packing Bandage";
-        picture = "ui\packingBandage_ca.paa";
-        model = "data\packingbandage.p3d";
-        descriptionShort = "Bandage for deep wounds";
-        descriptionUse = "Pack deep wounds";
+        author = ECSTRING(common,ACETeam);
+        displayName = CSTRING(Packing_Bandage_Display);
+        picture = QPATHTOF(ui\packingBandage_ca.paa);
+        model = QPATHTOF(data\packingbandage.p3d);
+        descriptionShort = CSTRING(Packing_Bandage_Desc_Short);
+        descriptionUse = CSTRING(Packing_Bandage_Desc_Use);
         ACE_isMedicalItem = 1;
         class ItemInfo: CBA_MiscItem_ItemInfo {
             mass = 0.6;

@@ -10,14 +10,9 @@ pub mod analyze;
 mod model;
 pub mod parse;
 pub mod rapify;
-mod macros;
-
 pub use model::*;
-pub use parse::*;
-pub use rapify::*;
-pub use analyze::*;
-pub use macros::*;
 
+use analyze::{Analyze, CfgPatch, ChumskyCode, LintData};
 use chumsky::Parser;
 use hemtt_common::version::Version;
 
@@ -63,7 +58,7 @@ pub fn parse(
                 default_enabled,
             )?;
             let localizations = Arc::new(Mutex::new(vec![]));
-            let codes = config.to_class().analyze(
+            let codes = config.analyze(
                 &LintData {
                     path: String::new(),
                     localizations: localizations.clone(),
@@ -163,11 +158,5 @@ impl ConfigReport {
     /// Get the localized strings
     pub fn localized(&self) -> &[(String, Position)] {
         &self.localized
-    }
-    
-    #[must_use]
-    /// Get the defines
-    pub fn defines(&self) -> &[Define] {
-        &self.config.1
     }
 }

@@ -68,33 +68,16 @@ fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
                     .delimited_by(just('('), just(')'))
             )
             .map_with_span(|(name, args), span| {
-                let name_len = name.len();
-                Item::Macro(MacroExpression {
-                    name: Str {
-                        value: name.clone(),
-                        span: span.start..span.start + name_len
-                    },
-                    args: args.into_iter()
-                        .map(|v| match v {
-                            Value::Str(s) => s,
-                            Value::Macro(m) => Str {
-                                value: format!("{}({})",
-                                    m.name.value,
-                                    m.args.iter()
-                                        .map(|a| a.value.as_str())
-                                        .collect::<Vec<_>>()
-                                        .join(",")
-                                ),
-                                span: m.span
-                            },
-                            _ => Str {
-                                value: String::new(),
-                                span: span.clone()
-                            }
-                        })
-                        .collect(),
-                    span
-                })
+                // Extract string values from the args
+                let arg_strings = args.into_iter()
+                    .map(|v| match v {
+                        Value::Str(s) => s.value().to_string(),
+                        Value::Macro(m) => m.to_string(),
+                        _ => String::new()
+                    })
+                    .collect();
+                
+                Item::Macro(MacroExpression::new(name, arg_strings, span))
             }),
     ))
     .recover_with(skip_parser(

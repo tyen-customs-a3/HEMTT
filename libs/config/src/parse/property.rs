@@ -1,7 +1,7 @@
 use chumsky::prelude::*;
 use std::ops::Range;
 
-use crate::{Class, Property, Value, EnumDef};
+use crate::{Class, EnumDef, Ident, MacroExpression, Property, Value};
 
 use super::{ident::ident, value::value};
 
@@ -33,13 +33,7 @@ fn macro_property_name() -> impl Parser<char, crate::Ident, Error = Simple<char>
             // Handle nested macros
             super::macro_expr::macro_expr()
                 .map(|v| match v {
-                    Value::Macro(m) => format!("{}({})",
-                        m.name.value,
-                        m.args.iter()
-                            .map(|a| a.value.clone())
-                            .collect::<Vec<_>>()
-                            .join(",")
-                    ),
+                    Value::Macro(m) => m.to_string(),
                     _ => String::new()
                 }),
             // Handle raw text (anything except closing parenthesis)
@@ -138,9 +132,11 @@ fn standalone_macro() -> impl Parser<char, Property, Error = Simple<char>> {
                 ))
         )
         .map_with_span(|(name, args), span| {
+            // Create a macro expression to standardize formatting
+            let macro_expr = MacroExpression::new(name, vec![args], span.clone());
             Property::Entry {
                 name: crate::Ident {
-                    value: format!("{}({})", name, args),
+                    value: macro_expr.to_string(),
                     span: span.clone(),
                 },
                 value: Value::Invalid(span),

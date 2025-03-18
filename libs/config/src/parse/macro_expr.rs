@@ -62,33 +62,16 @@ pub fn macro_arg() -> impl Parser<char, Value, Error = Simple<char>> {
                     .delimited_by(just('('), just(')'))
             )
             .map_with_span(|(name, args), span| {
-                let name_len = name.len();
-                Value::Macro(MacroExpression {
-                    name: Str {
-                        value: name.clone(),
-                        span: span.start..span.start + name_len
-                    },
-                    args: args.into_iter()
-                        .map(|v| match v {
-                            Value::Str(s) => s,
-                            Value::Macro(m) => Str {
-                                value: format!("{}({})",
-                                    m.name.value,
-                                    m.args.iter()
-                                        .map(|a| a.value.as_str())
-                                        .collect::<Vec<_>>()
-                                        .join(",")
-                                ),
-                                span: m.span
-                            },
-                            _ => Str {
-                                value: String::new(),
-                                span: span.clone()
-                            }
-                        })
-                        .collect(),
-                    span
-                })
+                // Convert args to strings
+                let arg_strings = args.into_iter()
+                    .map(|v| match v {
+                        Value::Str(s) => s.value().to_string(),
+                        Value::Macro(m) => m.to_string(),
+                        _ => String::new()
+                    })
+                    .collect();
+                
+                Value::Macro(MacroExpression::new(name.clone(), arg_strings, span))
             });
 
         choice((
@@ -109,46 +92,22 @@ fn macro_call() -> impl Parser<char, MacroExpression, Error = Simple<char>> {
                 .delimited_by(just('('), just(')'))
         )
         .map_with_span(|(name, args), span| {
-            let name_len = name.len();
-            MacroExpression {
-                name: Str {
-                    value: name,
-                    span: span.start..span.start + name_len
-                },
-                args: args.into_iter()
-                    .map(|v| match v {
-                        Value::Str(s) => s,
-                        Value::Macro(m) => Str {
-                            value: format!("{}({})",
-                                m.name.value,
-                                m.args.iter()
-                                    .map(|a| a.value.as_str())
-                                    .collect::<Vec<_>>()
-                                    .join(",")
-                            ),
-                            span: m.span
-                        },
-                        _ => Str {
-                            value: String::new(),
-                            span: span.clone()
-                        }
-                    })
-                    .collect(),
-                span
-            }
+            // Convert args to strings
+            let arg_strings = args.into_iter()
+                .map(|v| match v {
+                    Value::Str(s) => s.value().to_string(),
+                    Value::Macro(m) => m.to_string(),
+                    _ => String::new()
+                })
+                .collect();
+            
+            MacroExpression::new(name, arg_strings, span)
         });
 
     // For macros without parentheses at all (e.g. WEAPON_FIRE_BEGIN)
     let no_args = macro_name()
         .map_with_span(|name, span| {
-            MacroExpression {
-                name: Str {
-                    value: name,
-                    span: span.clone()
-                },
-                args: Vec::new(),
-                span
-            }
+            MacroExpression::new(name, vec![], span)
         })
         .then_ignore(end());
 

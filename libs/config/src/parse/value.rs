@@ -11,7 +11,7 @@ pub fn value() -> impl Parser<char, Value, Error = Simple<char>> {
         super::str::string('"').map(Value::Str),
         math().map(Value::Number),
         super::number::number().map(Value::Number),
-        super::macro_expr::macro_expr().map(Value::Macro),
+        super::macro_expr::macro_expr(),
     ))
 }
 

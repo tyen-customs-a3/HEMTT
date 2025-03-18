@@ -766,7 +766,7 @@ test_config_parse!(
 //==============================================================================
 
 test_config_parse!(
-    test_soundGetIn_syntax,
+    test_sound_syntax,
     r#"
     class Test {
         foo[]={"path\to\sound",db+5,1,9};

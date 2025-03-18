@@ -1,25 +1,32 @@
 use chumsky::prelude::*;
 
-use crate::{Array, Item};
+use crate::{Array, Item, Value};
 
 use super::value::math;
 use super::macro_expr;
 
 pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
     recursive(|value| {
-        value
-            .map(Item::Array)
-            .or(array_value().recover_with(skip_parser(
-                none_of("},")
-                    .padded()
-                    .repeated()
-                    .at_least(1)
-                    .map_with_span(move |_, span| Item::Invalid(span)),
-            )))
-            .padded()
-            .separated_by(just(',').padded())
-            .allow_trailing()
-            .delimited_by(just('{').padded(), just('}').padded())
+        choice((
+            just('{')
+                .padded()
+                .ignore_then(just('}').padded())
+                .map(|_| vec![]),
+            value
+                .map(Item::Array)
+                .or(array_value())
+                .padded()
+                .separated_by(just(',').padded())
+                .allow_trailing()
+                .delimited_by(just('{').padded(), just('}').padded())
+                .map(|mut items| {
+                    // Remove any trailing Invalid items that might have been added due to trailing commas
+                    while let Some(Item::Invalid(_)) = items.last() {
+                        items.pop();
+                    }
+                    items
+                })
+        ))
     })
     .map_with_span(move |items, span| Array {
         expand,
@@ -33,7 +40,11 @@ fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
         super::str::string('"').map(Item::Str),
         math().map(Item::Number),
         super::number::number().map(Item::Number),
-        super::macro_expr::macro_expr().map(Item::Macro),
+        super::macro_expr::macro_expr().map(|v| match v {
+            Value::Macro(m) => Item::Macro(m),
+            Value::Invalid(span) => Item::Invalid(span),
+            _ => Item::Invalid(0..0), // Fallback case
+        }),
     ))
     .recover_with(skip_parser(
         none_of("},")

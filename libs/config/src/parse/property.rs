@@ -27,36 +27,47 @@ fn class_missing_braces() -> impl Parser<char, Class, Error = Simple<char>> {
 // Parse a macro property name like GVAR(bodyBagObject) or ECSTRING(common,ACETeam)
 fn macro_property_name() -> impl Parser<char, crate::Ident, Error = Simple<char>> {
     let macro_name = super::macro_expr::macro_name();
-    let macro_arg = recursive(|arg| {
+    
+    // Parse macro arguments allowing commas and nested macros
+    let macro_arg = recursive(|_arg| {
         choice((
             // Handle nested macros
-            super::macro_expr::macro_expr().map(|m| format!("{}({})", 
-                m.name.value,
-                m.args.iter()
-                    .map(|a| a.value.clone())
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )),
-            // Handle quoted strings
-            super::str::string('"').map(|s| s.value),
-            // Handle numbers and other characters
-            filter(|c: &char| !matches!(*c, ',' | ')'))
+            super::macro_expr::macro_expr()
+                .map(|v| match v {
+                    Value::Macro(m) => format!("{}({})",
+                        m.name.value,
+                        m.args.iter()
+                            .map(|a| a.value.clone())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    ),
+                    _ => String::new()
+                }),
+            // Handle raw text (anything except closing parenthesis)
+            filter(|c: &char| *c != ')')
                 .repeated()
+                .at_least(1)
                 .collect::<String>()
         ))
     });
-        
-    let macro_args = macro_arg
-        .separated_by(just(','))
-        .allow_trailing()
-        .delimited_by(just('('), just(')'))
-        .map(|args| args.join(","));
 
+    // Parse the full macro with arguments
     macro_name
-        .then(macro_args)
+        .then(
+            macro_arg
+                .separated_by(just(',').padded())
+                .allow_trailing()
+                .delimited_by(just('('), just(')'))
+                .recover_with(nested_delimiters(
+                    '(',
+                    ')',
+                    [('[', ']'), ('{', '}')],
+                    |_| Vec::new()
+                ))
+        )
         .map_with_span(|(name, args), span| {
             crate::Ident {
-                value: format!("{}({})", name, args),
+                value: format!("{}({})", name, args.join(",")),
                 span,
             }
         })

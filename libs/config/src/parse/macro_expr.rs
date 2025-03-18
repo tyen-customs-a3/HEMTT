@@ -17,8 +17,19 @@ pub fn macro_name() -> impl Parser<char, String, Error = Simple<char>> {
         })
 }
 
-/// Parse a macro argument, which can be a nested macro, string, or raw text
-fn macro_arg() -> impl Parser<char, Value, Error = Simple<char>> {
+/// Parse a token concatenation operator (##) and the token that follows it
+pub fn token_concat() -> impl Parser<char, String, Error = Simple<char>> {
+    just("##")
+        .ignore_then(
+            filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_')
+                .repeated()
+                .at_least(1)
+                .collect::<String>()
+        )
+}
+
+/// Parse a macro argument, which can be a nested macro, string, raw text, or token concatenation
+pub fn macro_arg() -> impl Parser<char, Value, Error = Simple<char>> {
     recursive(|arg: Recursive<'_, char, Value, Simple<char>>| {
         let quoted_string = just('"')
             .ignore_then(filter(|c: &char| *c != '"').repeated())
@@ -27,13 +38,20 @@ fn macro_arg() -> impl Parser<char, Value, Error = Simple<char>> {
             .map(|s| format!("\"{}\"", s))
             .map_with_span(|s, span| Value::Str(Str { value: s, span }));
 
-        let raw_text = filter(|c: &char| !matches!(*c, ',' | '(' | ')' | '"'))
-            .repeated()
-            .collect::<String>()
-            .map_with_span(|s, span| Value::Str(Str {
-                value: s.trim().to_string(),
-                span
-            }));
+        // Handle token concatenation with ## operator, treating it as part of raw text
+        let token_concatenation = token_concat()
+            .map(|token| format!("##{}##", token));
+
+        let raw_text = choice((
+            token_concatenation,
+            filter(|c: &char| !matches!(*c, ',' | '(' | ')' | '"' | '#'))
+                .repeated()
+                .collect::<String>()
+        ))
+        .map_with_span(|s, span| Value::Str(Str {
+            value: s.trim().to_string(),
+            span
+        }));
 
         // For nested macros, parse them as actual macro expressions
         let nested_macro = macro_name()
@@ -83,7 +101,7 @@ fn macro_arg() -> impl Parser<char, Value, Error = Simple<char>> {
 
 /// Parse a macro call with its arguments
 fn macro_call() -> impl Parser<char, MacroExpression, Error = Simple<char>> {
-    macro_name()
+    let with_args = macro_name()
         .then(
             macro_arg()
                 .separated_by(just(',').padded())
@@ -118,7 +136,24 @@ fn macro_call() -> impl Parser<char, MacroExpression, Error = Simple<char>> {
                     .collect(),
                 span
             }
+        });
+
+    // For macros without parentheses at all (e.g. WEAPON_FIRE_BEGIN)
+    let no_args = macro_name()
+        .map_with_span(|name, span| {
+            MacroExpression {
+                name: Str {
+                    value: name,
+                    span: span.clone()
+                },
+                args: Vec::new(),
+                span
+            }
         })
+        .then_ignore(end());
+
+    // Try parsing with arguments first, fall back to no-args only if there are no parentheses
+    with_args.or(no_args)
 }
 
 /// Parse a macro expression into its components
@@ -213,6 +248,32 @@ mod tests {
         assert_eq!(macro_expr.args.len(), 2);
         assert_eq!(macro_expr.args[0].value, "common");
         assert_eq!(macro_expr.args[1].value, "ACETeam");
+    }
+
+    #[test]
+    fn test_no_args_macro() {
+        let result = macro_expr().parse("WEAPON_FIRE_BEGIN").unwrap();
+        let parsed = get_macro_expr(result);
+        assert_eq!(parsed.name.value, "WEAPON_FIRE_BEGIN");
+        assert_eq!(parsed.args.len(), 0);
+
+        let result = macro_expr().parse("WEAPON_FIRE_END").unwrap();
+        let parsed = get_macro_expr(result);
+        assert_eq!(parsed.name.value, "WEAPON_FIRE_END");
+        assert_eq!(parsed.args.len(), 0);
+        
+        // Also test with empty parentheses
+        let result = macro_expr().parse("WEAPON_FIRE_BEGIN()").unwrap();
+        let parsed = get_macro_expr(result);
+        assert_eq!(parsed.name.value, "WEAPON_FIRE_BEGIN");
+        assert_eq!(parsed.args.len(), 1);
+        assert_eq!(parsed.args[0].value, "");
+        
+        let result = macro_expr().parse("WEAPON_FIRE_END()").unwrap();
+        let parsed = get_macro_expr(result);
+        assert_eq!(parsed.name.value, "WEAPON_FIRE_END");
+        assert_eq!(parsed.args.len(), 1);
+        assert_eq!(parsed.args[0].value, "");
     }
 
     #[test]

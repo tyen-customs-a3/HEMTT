@@ -1,31 +1,44 @@
 use chumsky::prelude::*;
 
-use crate::{Array, Item, Value};
+use crate::{Array, Item, Number, Value, MacroExpression, Str};
 
 use super::value::math;
 use super::macro_expr;
 
 pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
-    recursive(|value| {
+    recursive(|array_parser| {
         choice((
+            // Empty array
             just('{')
                 .padded()
                 .ignore_then(just('}').padded())
                 .map(|_| vec![]),
-            value
-                .map(Item::Array)
-                .or(array_value())
-                .padded()
-                .separated_by(just(',').padded())
-                .allow_trailing()
-                .delimited_by(just('{').padded(), just('}').padded())
-                .map(|mut items| {
-                    // Remove any trailing Invalid items that might have been added due to trailing commas
-                    while let Some(Item::Invalid(_)) = items.last() {
-                        items.pop();
-                    }
-                    items
-                })
+            
+            // Array with items
+            choice((
+                // Handle nested arrays
+                array_parser.map(Item::Array),
+                
+                // Handle basic array values
+                array_value(),
+            ))
+            .padded()
+            .separated_by(just(',').padded())
+            .allow_trailing()
+            .delimited_by(just('{').padded(), just('}').padded())
+            .recover_with(nested_delimiters(
+                '{',
+                '}',
+                [('[', ']'), ('(', ')')], // Also track these delimiter pairs
+                |_| vec![] // Return empty vec on recovery
+            ))
+            .map(|mut items| {
+                // Remove any trailing Invalid items that might have been added due to trailing commas
+                while let Some(Item::Invalid(_)) = items.last() {
+                    items.pop();
+                }
+                items
+            })
         ))
     })
     .map_with_span(move |items, span| Array {
@@ -37,14 +50,52 @@ pub fn array(expand: bool) -> impl Parser<char, Array, Error = Simple<char>> {
 
 fn array_value() -> impl Parser<char, Item, Error = Simple<char>> {
     choice((
+        // String values
         super::str::string('"').map(Item::Str),
+        
+        // Math expressions
         math().map(Item::Number),
+        
+        // Number literals
         super::number::number().map(Item::Number),
-        super::macro_expr::macro_expr().map(|v| match v {
-            Value::Macro(m) => Item::Macro(m),
-            Value::Invalid(span) => Item::Invalid(span),
-            _ => Item::Invalid(0..0), // Fallback case
-        }),
+        
+        // Macros with parentheses
+        super::macro_expr::macro_name()
+            .then(
+                super::macro_expr::macro_arg()
+                    .separated_by(just(',').padded())
+                    .allow_trailing()
+                    .delimited_by(just('('), just(')'))
+            )
+            .map_with_span(|(name, args), span| {
+                let name_len = name.len();
+                Item::Macro(MacroExpression {
+                    name: Str {
+                        value: name.clone(),
+                        span: span.start..span.start + name_len
+                    },
+                    args: args.into_iter()
+                        .map(|v| match v {
+                            Value::Str(s) => s,
+                            Value::Macro(m) => Str {
+                                value: format!("{}({})",
+                                    m.name.value,
+                                    m.args.iter()
+                                        .map(|a| a.value.as_str())
+                                        .collect::<Vec<_>>()
+                                        .join(",")
+                                ),
+                                span: m.span
+                            },
+                            _ => Str {
+                                value: String::new(),
+                                span: span.clone()
+                            }
+                        })
+                        .collect(),
+                    span
+                })
+            }),
     ))
     .recover_with(skip_parser(
         none_of("},")

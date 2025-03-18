@@ -1119,3 +1119,66 @@ test_config_parse!(
     "#,
     "Failed to parse vehicle sound configuration with complex expressions"
 );
+
+#[test]
+fn test_standalone_macro_calls() {
+    // Test for standalone macro calls without a following statement
+    // Based on patterns from sound shader files
+    let config = r#"
+    // Sound shader macros with parameters
+    RHS_SOUNDSHADER_MINICANNON(yakb,4500)
+    HELISOUNDSHADERS_DEFAULT(venom,2500,20000,FILEPATH,PREFIX)
+    RHS_TAILSHADERCONFIG_CANNON(autocannon,3700)
+    
+    // Regular property after macros to ensure parsing continues
+    regularProperty = 1;
+    "#;
+    
+    let result = parse_helpers::parse_config(config);
+    assert!(result.is_ok(), "Failed to parse config with standalone macro calls");
+}
+
+#[test]
+fn test_macro_token_concatenation() {
+    // Test for macro token concatenation using ## operator
+    // Based on patterns from engine_asset.hpp
+    let config = r#"
+    // Define using token concatenation
+    #define SOUNDSET_DEF(vehname,modtag,campos,rpm) ##modtag##_##vehname##_Engine_##rpm##_##campos##_SoundSet,
+    
+    // Usage of the define
+    SOUNDSET_DEF(VEH_NAME,MOD_TAG,CAMPOS,RPM0)
+    
+    // Regular property after token concatenation
+    regularProperty = 1;
+    "#;
+    
+    let result = parse_helpers::parse_config(config);
+    assert!(result.is_ok(), "Failed to parse config with token concatenation");
+}
+
+#[test]
+fn test_combined_edge_cases() {
+    // Test combining multiple edge cases:
+    // 1. Extra parentheses in EVAL expressions
+    // 2. Standalone macros without assignment
+    // 3. Token concatenation with ## operator
+    let config = r#"
+    // Standalone macros like those found in sound files
+    RHS_SOUNDSHADER_MINICANNON(yakb,4500)
+    HELISOUNDSHADERS_DEFAULT(venom,2500,20000,FILEPATH,PREFIX)
+    
+    // Extra parentheses in EVAL expressions like in physics files
+    tankTurnForceAngMinSpd = __EVAL(45*(PI/180)));
+    tankTurnForceAngSpd = __EVAL(48*(PI/180))); 
+    
+    // Token concatenation for macro definitions
+    #define SOUNDSET_DEF(vehname,modtag,campos,rpm) ##modtag##_##vehname##_Engine_##rpm##_##campos##_SoundSet
+    
+    // Regular property to ensure parsing continues
+    regularProperty = 1;
+    "#;
+    
+    let result = parse_helpers::parse_config(config);
+    assert!(result.is_ok(), "Failed to parse config with combined edge cases");
+}

@@ -1,4 +1,5 @@
 use chumsky::prelude::*;
+use std::ops::Range;
 
 use crate::{Class, Property, Value, EnumDef};
 
@@ -26,8 +27,6 @@ fn class_missing_braces() -> impl Parser<char, Class, Error = Simple<char>> {
 
 // Parse a macro property name like GVAR(bodyBagObject) or ECSTRING(common,ACETeam)
 fn macro_property_name() -> impl Parser<char, crate::Ident, Error = Simple<char>> {
-    let macro_name = super::macro_expr::macro_name();
-    
     // Parse macro arguments allowing commas and nested macros
     let macro_arg = recursive(|_arg| {
         choice((
@@ -51,8 +50,7 @@ fn macro_property_name() -> impl Parser<char, crate::Ident, Error = Simple<char>
         ))
     });
 
-    // Parse the full macro with arguments
-    macro_name
+    super::macro_expr::macro_name()
         .then(
             macro_arg
                 .separated_by(just(',').padded())
@@ -64,10 +62,15 @@ fn macro_property_name() -> impl Parser<char, crate::Ident, Error = Simple<char>
                     [('[', ']'), ('{', '}')],
                     |_| Vec::new()
                 ))
+                .or_not()
         )
         .map_with_span(|(name, args), span| {
             crate::Ident {
-                value: format!("{}({})", name, args.join(",")),
+                value: if let Some(args) = args {
+                    format!("{}({})", name, args.join(","))
+                } else {
+                    name
+                },
                 span,
             }
         })
@@ -119,6 +122,38 @@ fn enum_def() -> impl Parser<char, Property, Error = Simple<char>> {
         })
 }
 
+// Parse a standalone macro call (like MACRO_NAME(args) without any property assignment)
+fn standalone_macro() -> impl Parser<char, Property, Error = Simple<char>> {
+    super::macro_expr::macro_name()
+        .then(
+            filter(|c: &char| *c != '=' && *c != '[' && *c != ';')
+                .repeated()
+                .collect::<String>()
+                .delimited_by(just('('), just(')'))
+                .recover_with(nested_delimiters(
+                    '(',
+                    ')',
+                    [('[', ']'), ('{', '}')],
+                    |_| "".to_string()
+                ))
+        )
+        .map_with_span(|(name, args), span| {
+            Property::Entry {
+                name: crate::Ident {
+                    value: format!("{}({})", name, args),
+                    span: span.clone(),
+                },
+                value: Value::Invalid(span),
+                expected_array: false,
+            }
+        })
+}
+
+// Helper to consume extra closing parentheses after a value
+fn consume_extra_parens() -> impl Parser<char, (), Error = Simple<char>> {
+    just(')').repeated().ignored()
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
     recursive(|_rec| {
@@ -127,7 +162,13 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
             .padded()
             .repeated()
             .padded()
-            .delimited_by(just('{'), just('}'));
+            .delimited_by(just('{'), just('}'))
+            .recover_with(nested_delimiters(
+                '{',
+                '}',
+                [('[', ']'), ('(', ')')],
+                |_| vec![]
+            ));
 
         let class_external = just("class ")
             .padded()
@@ -141,6 +182,15 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
             .then(class_parent().or_not())
             .padded()
             .then(properties)
+            .recover_with(nested_delimiters(
+                '{',
+                '}',
+                [('[', ']'), ('(', ')')],
+                |_| ((crate::Ident {
+                    value: "recovery".to_string(),
+                    span: 0..0,
+                }, None), vec![])
+            ))
             .map(|((ident, parent), properties)| Class::Local {
                 name: ident,
                 parent,
@@ -150,6 +200,48 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
 
         let class = choice((class_local, class_missing_braces(), class_external));
 
+        let property_assignment = choice((
+            macro_property_name(),
+            ident(),
+        ))
+            .padded()
+            .then(
+                just("[]")
+                    .padded()
+                    .ignore_then(
+                        just('=')
+                            .padded()
+                            .ignore_then(
+                                super::array::array(false)
+                                    .map(Value::Array)
+                                    .or(value())
+                                    .padded()
+                                    .labelled("array value")
+                                    .recover_with(skip_until([';'], Value::Invalid)),
+                            )
+                            .map(|value| (value, true))
+                            .or(just("+=")
+                                .padded()
+                                .ignore_then(super::array::array(true).map(Value::Array))
+                                .map(|value| (value, true))),
+                    )
+                    .or(just('=')
+                        .padded()
+                        .ignore_then(
+                            value()
+                                .recover_with(skip_until([';'], Value::Invalid))
+                                .padded()
+                                .labelled("property value"),
+                        )
+                        .then_ignore(consume_extra_parens().or_not())
+                        .map(|value| (value, false))),
+            )
+            .map(|(name, (value, expected_array))| Property::Entry {
+                name,
+                value,
+                expected_array,
+            });
+
         choice((
             class.map(Property::Class),
             just("delete ")
@@ -158,51 +250,26 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
                 .map(Property::Delete),
             enum_def(),
             // Handle property assignments first
-            choice((
-                macro_property_name(),
-                ident().labelled("property name"),
-            ))
-                .padded()
-                .then(
-                    just("[]")
-                        .padded()
-                        .ignore_then(
-                            just('=')
-                                .padded()
-                                .ignore_then(
-                                    super::array::array(false)
-                                        .map(Value::Array)
-                                        .or(value())
-                                        .padded()
-                                        .labelled("array value")
-                                        .recover_with(skip_until([';'], Value::Invalid)),
-                                )
-                                .map(|value| (value, true))
-                                .or(just("+=")
-                                    .padded()
-                                    .ignore_then(super::array::array(true).map(Value::Array))
-                                    .map(|value| (value, true))),
-                        )
-                        .or(just('=')
-                            .padded()
-                            .ignore_then(
-                                value()
-                                    .recover_with(skip_until([';'], Value::Invalid))
-                                    .padded()
-                                    .labelled("property value"),
-                            )
-                            .map(|value| (value, false))),
-                )
-                .map(|(name, (value, expected_array))| Property::Entry {
-                    name,
-                    value,
-                    expected_array,
-                }),
-            // Then handle standalone macros, but only if they're not followed by = or []
+            property_assignment,
+            // Then handle standalone macros more explicitly
+            standalone_macro(),
+            // Then handle property name macros not followed by assignment
             macro_property_name()
                 .then_ignore(none_of("=[").rewind())
                 .map_with_span(|name, span| Property::Entry {
                     name,
+                    value: Value::Invalid(span),
+                    expected_array: false,
+                }),
+            
+            // Handle trailing commas in macro expansions (common in engine_asset.hpp)
+            just(',')
+                .padded()
+                .map_with_span(|_, span: Range<usize>| Property::Entry {
+                    name: crate::Ident {
+                        value: "".to_string(),
+                        span: span.clone(),
+                    },
                     value: Value::Invalid(span),
                     expected_array: false,
                 }),

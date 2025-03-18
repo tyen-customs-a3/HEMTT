@@ -15,6 +15,9 @@ pub fn value() -> impl Parser<char, Value, Error = Simple<char>> {
     ))
 }
 
+/// Handles simple math expressions
+/// This is a simpler implementation that doesn't try to be too clever
+/// but handles basic arithmetic expressions
 pub fn math() -> impl Parser<char, Number, Error = Simple<char>> {
     choice((
         super::number::number().map(|n| n.to_string()),

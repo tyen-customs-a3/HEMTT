@@ -1182,3 +1182,98 @@ fn test_combined_edge_cases() {
     let result = parse_helpers::parse_config(config);
     assert!(result.is_ok(), "Failed to parse config with combined edge cases");
 }
+
+//==============================================================================
+// CLASS NAME WITH MACRO TESTS
+//==============================================================================
+// Tests for class declarations using macros in class name, which is common
+// in Arma mods for namespacing purposes (e.g., class GVAR(actions) {})
+//==============================================================================
+
+test_config_parse!(
+    test_class_with_macro_name,
+    r#"
+    class GVAR(actions) {};
+    "#,
+    "Failed to parse class with macro name GVAR(actions)"
+);
+
+test_config_parse!(
+    test_class_with_macro_name_and_properties,
+    r#"
+    class GVAR(actions) {
+        property = 1;
+        stringProp = "value";
+    };
+    "#,
+    "Failed to parse class with macro name and properties"
+);
+
+test_config_parse!(
+    test_multiple_macro_class_names,
+    r#"
+    class GVAR(actions) {};
+    class GVAR(items) {};
+    class EGVAR(common,settings) {};
+    "#,
+    "Failed to parse multiple classes with macro names"
+);
+
+test_config_parse!(
+    test_macro_class_with_inheritance,
+    r#"
+    class CfgBase {};
+    class GVAR(actions): CfgBase {
+        property = 1;
+    };
+    "#,
+    "Failed to parse class with macro name and inheritance"
+);
+
+test_config_parse!(
+    test_nested_macro_classes,
+    r#"
+    class GVAR(container) {
+        class GVAR(nested) {
+            property = 1;
+        };
+    };
+    "#,
+    "Failed to parse nested classes with macro names"
+);
+
+test_config_parse!(
+    test_complex_macro_class_names,
+    r#"
+    class PREFIX_CLASS(name) {};
+    class TRIPLES(prefix,mid,suffix) {};
+    class DOUBLES(prefix,name) {};
+    "#,
+    "Failed to parse classes with complex macro naming patterns"
+);
+
+test_config_parse!(
+    test_macro_class_with_array_property,
+    r#"
+    class GVAR(items) {
+        items[] = {"item1", "item2", "item3"};
+    };
+    "#,
+    "Failed to parse macro-named class with array property"
+);
+
+test_config_parse!(
+    test_mixed_standard_and_macro_classes,
+    r#"
+    class NormalClass {
+        prop = 1;
+    };
+    class GVAR(macroClass) {
+        prop = 2;
+    };
+    class AnotherNormal: GVAR(macroClass) {
+        prop = 3;
+    };
+    "#,
+    "Failed to parse a mix of standard and macro-named classes with inheritance"
+);

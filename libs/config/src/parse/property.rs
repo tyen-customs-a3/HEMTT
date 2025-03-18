@@ -8,13 +8,19 @@ use super::{ident::ident, value::value};
 fn class_parent() -> impl Parser<char, crate::Ident, Error = Simple<char>> {
     just(':')
         .padded()
-        .ignore_then(ident().padded().labelled("class parent"))
+        .ignore_then(choice((
+            macro_property_name(),
+            ident().labelled("class parent")
+        )).padded())
 }
 
 fn class_missing_braces() -> impl Parser<char, Class, Error = Simple<char>> {
     just("class ")
         .padded()
-        .ignore_then(ident().padded().labelled("class name"))
+        .ignore_then(choice((
+            macro_property_name(),
+            ident().labelled("class name")
+        )).padded())
         .then(class_parent())
         .padded()
         .map(|(ident, parent)| Class::Local {
@@ -168,13 +174,19 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
 
         let class_external = just("class ")
             .padded()
-            .ignore_then(ident().padded().labelled("class name"))
+            .ignore_then(choice((
+                macro_property_name(),
+                ident().padded().labelled("class name")
+            )).padded())
             .padded()
             .map(|ident| Class::External { name: ident });
 
         let class_local = just("class ")
             .padded()
-            .ignore_then(ident().padded().labelled("class name"))
+            .ignore_then(choice((
+                macro_property_name(),
+                ident().padded().labelled("class name")
+            )).padded())
             .then(class_parent().or_not())
             .padded()
             .then(properties)

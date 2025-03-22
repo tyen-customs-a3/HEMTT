@@ -18,6 +18,7 @@ members = [
     "libs/stringtable",
     "libs/workspace",
     "libs/sqm",
+    "libs/mission",
 
     "arma",
 ]

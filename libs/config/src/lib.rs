@@ -80,6 +80,7 @@ pub fn parse(
     )
 }
 
+#[derive(Debug, Clone)]
 /// A parsed config file with warnings and errors
 pub struct ConfigReport {
     config: Config,

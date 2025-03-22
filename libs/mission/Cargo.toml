@@ -1,0 +1,37 @@
+[package]
+name = "hemtt-mission"
+version = "0.1.0"
+edition = "2024"
+description = "Arma 3 mission processing library for HEMTT"
+license = "GPL-2.0"
+
+[lints]
+workspace = true
+
+[dependencies]
+hemtt-common = { path = "../common" }
+hemtt-sqm = { path = "../sqm" }
+hemtt-config = { path = "../config" }
+hemtt-preprocessor = { path = "../preprocessor" }
+hemtt-sqf = { path = "../sqf" }
+hemtt-workspace = { path = "../workspace" }
+hemtt-stringtable = { path = "../stringtable" }
+
+thiserror = { workspace = true }
+tracing = { workspace = true }
+regex = { workspace = true }
+rayon = "1.10.0"
+walkdir = "2.5.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0.140"
+colored = "3.0.0"
+
+[dev-dependencies]
+insta = { workspace = true }
+tempfile = "3.5.0"
+tracing-subscriber = "0.3.17"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "mission_parsing"
+harness = false

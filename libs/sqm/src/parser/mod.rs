@@ -1,23 +1,27 @@
 mod error;
-mod value;
 mod parallel;
 
-use std::collections::HashMap;
-
-use crate::{Class, SqmFile};
-use crate::lexer::{self, Token, IntegratedLexer};
+use crate::SqmFile;
+use crate::lexer::IntegratedLexer;
 use crate::parser::parallel::ParallelParser;
 
 pub use error::{ParseError, emit_diagnostics};
 pub use parallel::ParallelConfig;
 
 /// Parse an SQM file with parallel processing for better performance
-pub fn parse_sqm(input: &str) -> Result<SqmFile, ParseError> {
+/// 
+/// # Errors
+/// Returns `Box<ParseError>` if there are issues with lexing, scanning or parsing the input
+pub fn parse_sqm(input: &str) -> Result<SqmFile, Box<ParseError>> {
     parse_sqm_with_config(input, ParallelConfig::default())
 }
 
 /// Parse an SQM file with a specific parallel parsing configuration
-pub fn parse_sqm_with_config<S: AsRef<str>>(input: S, config: ParallelConfig) -> Result<SqmFile, ParseError> {
+/// 
+/// # Errors
+/// Returns `Box<ParseError>` if there are issues with lexing, scanning or parsing the input.
+/// This could include invalid tokens, unclosed classes, or other syntax errors.
+pub fn parse_sqm_with_config<S: AsRef<str>>(input: S, config: ParallelConfig) -> Result<SqmFile, Box<ParseError>> {
     let input_str = input.as_ref();
     
     // Use the integrated lexer for both tokenization and boundary scanning
@@ -25,12 +29,12 @@ pub fn parse_sqm_with_config<S: AsRef<str>>(input: S, config: ParallelConfig) ->
     let tokens = integrated_lexer.lex(input_str).to_vec();
     
     if !integrated_lexer.errors().is_empty() {
-        return Err(ParseError::LexError(integrated_lexer.errors()[0].clone()));
+        return Err(Box::new(ParseError::LexError(integrated_lexer.errors()[0].clone())));
     }
     
     // Scan for class boundaries using the integrated lexer
     let boundary_map = integrated_lexer.scan_boundaries()
-        .map_err(ParseError::ScanError)?;
+        .map_err(|e| Box::new(ParseError::ScanError(e)))?;
     
     // Set up the parallel parser with appropriate configuration
     let parser = ParallelParser::new(tokens, boundary_map, config);
@@ -41,13 +45,15 @@ pub fn parse_sqm_with_config<S: AsRef<str>>(input: S, config: ParallelConfig) ->
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Value;
+    use std::collections::HashMap;
+    use crate::lexer;
+    use crate::{Class, Value, SqmFile};
+    use super::parse_sqm;
 
     #[test]
     fn test_version_parsing() {
         let input = "version = 54;";
-        let result = parse_sqm(input).unwrap();
+        let result = parse_sqm(input).expect("Failed to parse version input");
         assert_eq!(result.version, Some(54));
     }
 
@@ -85,8 +91,8 @@ mod tests {
                 }
             };
             
-            let test_class = result.classes.get("Test").unwrap();
-            let property_name = input.split('[').next().unwrap().trim();
+            let test_class = result.classes.get("Test").expect("Failed to find Test class");
+            let property_name = input.split('[').next().expect("Failed to split property name").trim();
             
             match &test_class[0].properties[property_name] {
                 Value::Array(values) => assert_eq!(values, &expected),
@@ -138,13 +144,13 @@ mod tests {
         };
         
         // Test expectations
-        let editor_data = result.classes.get("EditorData").unwrap();
+        let editor_data = result.classes.get("EditorData").expect("Failed to find EditorData class");
         assert_eq!(editor_data.len(), 1);
         let editor_data = &editor_data[0];
         
         assert_eq!(editor_data.properties.get("moveGridStep"), Some(&Value::Number(2.0)));
 
-        let item_provider = editor_data.classes.get("ItemIDProvider").unwrap();
+        let item_provider = editor_data.classes.get("ItemIDProvider").expect("Failed to find ItemIDProvider class");
         assert_eq!(item_provider[0].properties.get("nextID"), Some(&Value::Integer(8745)));
     }
 
@@ -155,7 +161,7 @@ mod tests {
             #define SOME_VALUE
         ";
 
-        let result = parse_sqm(input).unwrap();
+        let result = parse_sqm(input).expect("Failed to parse defines input");
         assert_eq!(result.defines.len(), 2);
         assert!(result.defines.contains(&"_ARMA_".to_string()));
         assert!(result.defines.contains(&"SOME_VALUE".to_string()));

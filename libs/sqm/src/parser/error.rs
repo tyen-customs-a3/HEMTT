@@ -30,6 +30,8 @@ pub enum ParseError {
 }
 
 /// Build a nice error message from a parsing error
+#[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
     match error {
         ParseError::Lexer(e) => {
@@ -41,8 +43,8 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
             let mut err_msg = format!("Lexer error at line {}, column {}:\n", line+1, col+1);
             err_msg.push_str(&line_str);
             err_msg.push_str(&" ".repeat(col));
-            err_msg.push_str("^ ");
-            err_msg.push_str(&format!("{}", e));
+            err_msg.push('^');
+            err_msg.push_str(&format!("{e}"));
             
             err_msg
         }
@@ -58,7 +60,7 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
                                              found, line+1, col+1);
                     err_msg.push_str(&line_str);
                     err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^");
+                    err_msg.push('^');
                     
                     err_msg
                 }
@@ -72,7 +74,7 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
                                              line+1, col+1);
                     err_msg.push_str(&line_str);
                     err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^");
+                    err_msg.push('^');
                     
                     err_msg
                 }
@@ -86,13 +88,13 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
                                              line+1, col+1, message);
                     err_msg.push_str(&line_str);
                     err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^");
+                    err_msg.push('^');
                     
                     err_msg
                 }
             }
         }
-        ParseError::Scanner(e) => {
+        ParseError::Scanner(e) | ParseError::ScanError(e) => {
             match e {
                 ScanError::UnexpectedToken { position, expected, found } => {
                     // Get error context by finding the line and column for the token position
@@ -104,7 +106,7 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
                                              line+1, col+1, expected, found);
                     err_msg.push_str(&line_str);
                     err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^");
+                    err_msg.push('^');
                     
                     err_msg
                 }
@@ -118,7 +120,8 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
                                             line+1, col+1);
                     err_msg.push_str(&line_str);
                     err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^ Missing closing brace for this class");
+                    err_msg.push('^');
+                    err_msg.push_str(" Missing closing brace for this class");
                     
                     err_msg
                 }
@@ -132,61 +135,13 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
                                             line+1, col+1);
                     err_msg.push_str(&line_str);
                     err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^ Expected a class name here");
+                    err_msg.push('^');
+                    err_msg.push_str(" Expected a class name here");
                     
                     err_msg
                 }
                 ScanError::InvalidInput { message } => {
-                    format!("Scanner error: {}", message)
-                }
-            }
-        }
-        ParseError::ScanError(e) => {
-            match e {
-                ScanError::UnexpectedToken { position, expected, found } => {
-                    // Get error context by finding the line and column for the token position
-                    let (line, col) = find_token_position(src, *position);
-                    let line_str = get_line(src, line);
-                    
-                    // Build error message with more context
-                    let mut err_msg = format!("Scanner error at line {}, column {}: Expected {} but found {:?}\n", 
-                                             line+1, col+1, expected, found);
-                    err_msg.push_str(&line_str);
-                    err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^");
-                    
-                    err_msg
-                }
-                ScanError::UnclosedClass { class_start } => {
-                    // Get error context for the class start position
-                    let (line, col) = find_token_position(src, *class_start);
-                    let line_str = get_line(src, line);
-                    
-                    // Build error message with more context
-                    let mut err_msg = format!("Unclosed class starting at line {}, column {}:\n", 
-                                            line+1, col+1);
-                    err_msg.push_str(&line_str);
-                    err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^ Missing closing brace for this class");
-                    
-                    err_msg
-                }
-                ScanError::MissingClassName { position } => {
-                    // Get error context
-                    let (line, col) = find_token_position(src, *position);
-                    let line_str = get_line(src, line);
-                    
-                    // Build error message
-                    let mut err_msg = format!("Missing class name at line {}, column {}:\n", 
-                                            line+1, col+1);
-                    err_msg.push_str(&line_str);
-                    err_msg.push_str(&" ".repeat(col));
-                    err_msg.push_str("^ Expected a class name here");
-                    
-                    err_msg
-                }
-                ScanError::InvalidInput { message } => {
-                    format!("Scanner error: {}", message)
+                    format!("Scanner error: {message}")
                 }
             }
         }
@@ -194,16 +149,15 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
             let mut expected_tokens = Vec::new();
             for expected in e.expected() {
                 match expected {
-                    Some(token) => expected_tokens.push(format!("{:?}", token)),
+                    Some(token) => expected_tokens.push(format!("{token:?}")),
                     None => expected_tokens.push("end of file".to_string()),
                 }
             }
             
-            let found = if let Some(token) = e.found() {
-                format!("{:?}", token)
-            } else {
-                "end of file".to_string()
-            };
+            let found = e.found().map_or_else(
+                || "end of file".to_string(),
+                |token| format!("{token:?}")
+            );
             
             // Get error context for better error messages
             let (line, col) = line_col_for_pos(src, e.span().start);
@@ -216,12 +170,12 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
             );
             err_msg.push_str(&line_str);
             err_msg.push_str(&" ".repeat(col));
-            err_msg.push_str("^");
+            err_msg.push('^');
             
             err_msg
         }
         ParseError::UnexpectedToken(token) => {
-            format!("Unexpected token: {:?}", token)
+            format!("Unexpected token: {token:?}")
         }
         ParseError::UnexpectedEof => {
             "Unexpected end of file".to_string()
@@ -277,19 +231,18 @@ fn find_token_position(src: &str, token_pos: usize) -> (usize, usize) {
     let mut estimated_pos = 0;
     for token in &tokens_until_position {
         match token {
+            // Single-character tokens: all have length 1
+            Token::OpenBrace | Token::CloseBrace | Token::OpenBracket | 
+            Token::CloseBracket | Token::Semicolon | Token::Equals | Token::Comma => {
+                estimated_pos += 1;
+            },
+            // Word tokens
             Token::Define => estimated_pos += "#define".len(),
             Token::Class => estimated_pos += "class".len(),
             Token::Version => estimated_pos += "version".len(),
-            Token::OpenBrace => estimated_pos += 1,
-            Token::CloseBrace => estimated_pos += 1,
-            Token::OpenBracket => estimated_pos += 1,
-            Token::CloseBracket => estimated_pos += 1,
-            Token::Semicolon => estimated_pos += 1,
-            Token::Equals => estimated_pos += 1,
-            Token::Comma => estimated_pos += 1,
-            Token::Identifier(s) => estimated_pos += s.len(),
+            // Value tokens
+            Token::Identifier(s) | Token::NumberLit(s) => estimated_pos += s.len(),
             Token::StringLit(s) => estimated_pos += s.len() + 2, // +2 for quotes
-            Token::NumberLit(s) => estimated_pos += s.len(),
             Token::Comment(_) => estimated_pos += 2, // "//" prefix
         }
         

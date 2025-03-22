@@ -1,8 +1,6 @@
 use std::ops::Range;
 use crate::lexer::Token;
 
-use std::collections::HashMap;
-
 /// Represents a class boundary in the token stream
 #[derive(Debug, Clone)]
 pub struct ClassBoundary {
@@ -27,7 +25,8 @@ pub struct BoundaryMap {
 
 impl BoundaryMap {
     /// Creates a new empty boundary map
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             boundaries: Vec::new(),
         }
@@ -43,13 +42,12 @@ impl BoundaryMap {
         let parent_idx = self.boundaries.iter()
             .position(|b| b.range.start == parent_start);
             
-        if let Some(idx) = parent_idx {
-            self.boundaries.iter()
+        parent_idx.map_or_else(
+            Vec::new,
+            |idx| self.boundaries.iter()
                 .filter(|b| b.parent_id == Some(idx))
                 .collect()
-        } else {
-            Vec::new()
-        }
+        )
     }
 }
 

@@ -1,6 +1,4 @@
 use std::hash::{Hash, Hasher};
-use std::collections::HashMap;
-use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
@@ -24,10 +22,7 @@ impl Hash for Token {
     fn hash<H: Hasher>(&self, state: &mut H) {
         core::mem::discriminant(self).hash(state);
         match self {
-            Token::Identifier(s) => s.hash(state),
-            Token::StringLit(s) => s.hash(state),
-            Token::NumberLit(s) => s.hash(state),
-            Token::Comment(s) => s.hash(state),
+            Self::Identifier(s) | Self::StringLit(s) | Self::NumberLit(s) | Self::Comment(s) => s.hash(state),
             _ => {}
         }
     }
@@ -76,7 +71,8 @@ pub struct IntegratedLexer {
 
 impl IntegratedLexer {
     /// Create a new integrated lexer
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             tokens: Vec::new(),
             errors: Vec::new(),
@@ -86,6 +82,7 @@ impl IntegratedLexer {
     }
 
     /// Process the input and generate tokens
+    #[allow(clippy::too_many_lines)]
     pub fn lex(&mut self, input: &str) -> &[Token] {
         self.input = input.to_string();
         self.tokens.clear();
@@ -96,185 +93,198 @@ impl IntegratedLexer {
         let chars: Vec<char> = input.chars().collect();
         
         while pos < chars.len() {
-            let c = chars[pos];
-            let token_start = pos;
-            
-            // Skip whitespace
-            if c.is_whitespace() {
-                pos += 1;
-                continue;
-            }
-            
-            // Handle comments
-            if pos + 1 < chars.len() && c == '/' && chars[pos + 1] == '/' {
-                pos += 2; // Skip '//'
+            if let Some(&c) = chars.get(pos) {
+                let token_start = pos;
                 
-                // Find the end of the line
-                let mut comment = String::new();
-                while pos < chars.len() && chars[pos] != '\n' {
-                    comment.push(chars[pos]);
+                // Skip whitespace
+                if c.is_whitespace() {
                     pos += 1;
+                    continue;
                 }
                 
-                self.add_token(Token::Comment(comment), token_start, pos - token_start);
-                continue;
-            }
-            
-            // Handle symbols
-            match c {
-                '{' => {
-                    self.add_token(Token::OpenBrace, token_start, 1);
-                    pos += 1;
+                // Handle comments
+                if pos + 1 < chars.len() && c == '/' && chars.get(pos + 1) == Some(&'/') {
+                    pos += 2; // Skip '//'
+                    
+                    // Find the end of the line
+                    let mut comment = String::new();
+                    while pos < chars.len() && chars.get(pos) != Some(&'\n') {
+                        if let Some(ch) = chars.get(pos) {
+                            comment.push(*ch);
+                        }
+                        pos += 1;
+                    }
+                    
+                    self.add_token(Token::Comment(comment), token_start, pos - token_start);
+                    continue;
                 }
-                '}' => {
-                    self.add_token(Token::CloseBrace, token_start, 1);
-                    pos += 1;
-                }
-                '[' => {
-                    self.add_token(Token::OpenBracket, token_start, 1);
-                    pos += 1;
-                }
-                ']' => {
-                    self.add_token(Token::CloseBracket, token_start, 1);
-                    pos += 1;
-                }
-                ';' => {
-                    self.add_token(Token::Semicolon, token_start, 1);
-                    pos += 1;
-                }
-                '=' => {
-                    self.add_token(Token::Equals, token_start, 1);
-                    pos += 1;
-                }
-                ',' => {
-                    self.add_token(Token::Comma, token_start, 1);
-                    pos += 1;
-                }
-                '#' => {
-                    // Handle #define
-                    if pos + 7 < chars.len() && 
-                       &chars[pos..pos+7].iter().collect::<String>() == "#define" &&
-                       (pos + 7 >= chars.len() || chars[pos + 7].is_whitespace()) {
-                        self.add_token(Token::Define, token_start, 7);
-                        pos += 7;
-                    } else {
+                
+                // Handle symbols
+                match c {
+                    '{' => {
+                        self.add_token(Token::OpenBrace, token_start, 1);
+                        pos += 1;
+                    }
+                    '}' => {
+                        self.add_token(Token::CloseBrace, token_start, 1);
+                        pos += 1;
+                    }
+                    '[' => {
+                        self.add_token(Token::OpenBracket, token_start, 1);
+                        pos += 1;
+                    }
+                    ']' => {
+                        self.add_token(Token::CloseBracket, token_start, 1);
+                        pos += 1;
+                    }
+                    ';' => {
+                        self.add_token(Token::Semicolon, token_start, 1);
+                        pos += 1;
+                    }
+                    '=' => {
+                        self.add_token(Token::Equals, token_start, 1);
+                        pos += 1;
+                    }
+                    ',' => {
+                        self.add_token(Token::Comma, token_start, 1);
+                        pos += 1;
+                    }
+                    '#' => {
+                        // Handle #define
+                        if pos + 7 < chars.len() && 
+                           &chars[pos..pos+7].iter().collect::<String>() == "#define" &&
+                           (pos + 7 >= chars.len() || {
+                               #[allow(clippy::unnecessary_map_or)]
+                               let is_whitespace = chars.get(pos + 7).map_or(true, |c| c.is_whitespace());
+                               is_whitespace
+                           }) {
+                            self.add_token(Token::Define, token_start, 7);
+                            pos += 7;
+                        } else {
+                            self.errors.push(LexError::UnexpectedChar { pos, found: c });
+                            pos += 1;
+                        }
+                    }
+                    '"' => {
+                        // Handle string literals
+                        pos += 1; // Skip opening quote
+                        let mut string = String::new();
+                        
+                        while pos < chars.len() && chars.get(pos) != Some(&'"') {
+                            if chars.get(pos) == Some(&'\\') && pos + 1 < chars.len() {
+                                // Handle escape sequences
+                                pos += 1;
+                                match chars.get(pos) {
+                                    Some('n') => string.push('\n'),
+                                    Some('r') => string.push('\r'),
+                                    Some('t') => string.push('\t'),
+                                    Some('\\') => string.push('\\'),
+                                    Some('"') => string.push('"'),
+                                    _ => if let Some(ch) = chars.get(pos) {
+                                        string.push(*ch);
+                                    },
+                                }
+                            } else {
+                                if let Some(ch) = chars.get(pos) {
+                                    string.push(*ch);
+                                }
+                                pos += 1;
+                            }
+                        }
+                        
+                        if pos < chars.len() && chars.get(pos) == Some(&'"') {
+                            self.add_token(Token::StringLit(string), token_start, pos - token_start + 1);
+                            pos += 1; // Skip closing quote
+                        } else {
+                            self.errors.push(LexError::UnterminatedString { start_pos: token_start });
+                        }
+                    }
+                    '-' | '0'..='9' => {
+                        // Handle number literals
+                        let mut is_negative = false;
+                        
+                        if c == '-' {
+                            is_negative = true;
+                            pos += 1;
+                            if pos >= chars.len() || !chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
+                                // Not a number, treat as an error
+                                self.errors.push(LexError::InvalidToken { 
+                                    pos: token_start, 
+                                    message: "Expected digit after '-'".to_string() 
+                                });
+                                continue;
+                            }
+                        }
+                        
+                        // Parse integer part
+                        let int_start = pos;
+                        while pos < chars.len() && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
+                            pos += 1;
+                        }
+                        
+                        // Parse fractional part
+                        if pos < chars.len() && chars.get(pos) == Some(&'.') {
+                            pos += 1;
+                            while pos < chars.len() && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
+                                pos += 1;
+                            }
+                        }
+                        
+                        // Handle scientific notation (e.g., 1.23e+10 or 4.56e-3)
+                        if pos + 1 < chars.len() && (chars.get(pos) == Some(&'e') || chars.get(pos) == Some(&'E')) {
+                            // We've seen 'e' or 'E', save this position in case it's not a valid scientific notation
+                            let e_pos = pos;
+                            pos += 1;
+                            
+                            // Allow for + or - after 'e'
+                            if pos < chars.len() && (chars.get(pos) == Some(&'+') || chars.get(pos) == Some(&'-')) {
+                                pos += 1;
+                            }
+                            
+                            // Must have at least one digit after e[+-]
+                            if pos < chars.len() && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
+                                // Parse exponent digits
+                                while pos < chars.len() && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
+                                    pos += 1;
+                                }
+                            } else {
+                                // No digits found after 'e' or 'e+' or 'e-', so reset position to before 'e'
+                                pos = e_pos;
+                            }
+                        }
+                        
+                        let num_str = if is_negative {
+                            let digits = &input[int_start..pos];
+                            format!("-{digits}")
+                        } else {
+                            input[token_start..pos].to_string()
+                        };
+                        
+                        self.add_token(Token::NumberLit(num_str), token_start, pos - token_start);
+                    }
+                    'a'..='z' | 'A'..='Z' | '_' => {
+                        // Handle identifiers and keywords
+                        let word_start = pos;
+                        while pos < chars.len() && (chars.get(pos).is_some_and(|c| c.is_alphanumeric()) || chars.get(pos) == Some(&'_')) {
+                            pos += 1;
+                        }
+                        
+                        let word = &input[word_start..pos];
+                        match word {
+                            "class" => self.add_token(Token::Class, token_start, 5),
+                            "version" => self.add_token(Token::Version, token_start, 7),
+                            _ => self.add_token(Token::Identifier(word.to_string()), token_start, word.len()),
+                        }
+                    }
+                    _ => {
+                        // Unexpected character
                         self.errors.push(LexError::UnexpectedChar { pos, found: c });
                         pos += 1;
                     }
                 }
-                '"' => {
-                    // Handle string literals
-                    pos += 1; // Skip opening quote
-                    let _content_start = pos;
-                    let mut string = String::new();
-                    
-                    while pos < chars.len() && chars[pos] != '"' {
-                        if chars[pos] == '\\' && pos + 1 < chars.len() {
-                            // Handle escape sequences
-                            pos += 1;
-                            match chars[pos] {
-                                'n' => string.push('\n'),
-                                'r' => string.push('\r'),
-                                't' => string.push('\t'),
-                                '\\' => string.push('\\'),
-                                '"' => string.push('"'),
-                                _ => string.push(chars[pos]),
-                            }
-                        } else {
-                            string.push(chars[pos]);
-                        }
-                        pos += 1;
-                    }
-                    
-                    if pos < chars.len() && chars[pos] == '"' {
-                        self.add_token(Token::StringLit(string), token_start, pos - token_start + 1);
-                        pos += 1; // Skip closing quote
-                    } else {
-                        self.errors.push(LexError::UnterminatedString { start_pos: token_start });
-                    }
-                }
-                '-' | '0'..='9' => {
-                    // Handle number literals
-                    let mut is_negative = false;
-                    
-                    if c == '-' {
-                        is_negative = true;
-                        pos += 1;
-                        if pos >= chars.len() || !chars[pos].is_ascii_digit() {
-                            // Not a number, treat as an error
-                            self.errors.push(LexError::InvalidToken { 
-                                pos: token_start, 
-                                message: "Expected digit after '-'".to_string() 
-                            });
-                            continue;
-                        }
-                    }
-                    
-                    // Parse integer part
-                    let int_start = pos;
-                    while pos < chars.len() && chars[pos].is_ascii_digit() {
-                        pos += 1;
-                    }
-                    
-                    // Parse fractional part
-                    if pos < chars.len() && chars[pos] == '.' {
-                        pos += 1;
-                        while pos < chars.len() && chars[pos].is_ascii_digit() {
-                            pos += 1;
-                        }
-                    }
-                    
-                    // Handle scientific notation (e.g., 1.23e+10 or 4.56e-3)
-                    if pos + 1 < chars.len() && (chars[pos] == 'e' || chars[pos] == 'E') {
-                        // We've seen 'e' or 'E', save this position in case it's not a valid scientific notation
-                        let e_pos = pos;
-                        pos += 1;
-                        
-                        // Allow for + or - after 'e'
-                        if pos < chars.len() && (chars[pos] == '+' || chars[pos] == '-') {
-                            pos += 1;
-                        }
-                        
-                        // Must have at least one digit after e[+-]
-                        if pos < chars.len() && chars[pos].is_ascii_digit() {
-                            // Parse exponent digits
-                            while pos < chars.len() && chars[pos].is_ascii_digit() {
-                                pos += 1;
-                            }
-                        } else {
-                            // No digits found after 'e' or 'e+' or 'e-', so reset position to before 'e'
-                            pos = e_pos;
-                        }
-                    }
-                    
-                    let num_str = if is_negative {
-                        let digits = &input[int_start..pos];
-                        format!("-{}", digits)
-                    } else {
-                        input[token_start..pos].to_string()
-                    };
-                    
-                    self.add_token(Token::NumberLit(num_str), token_start, pos - token_start);
-                }
-                'a'..='z' | 'A'..='Z' | '_' => {
-                    // Handle identifiers and keywords
-                    let word_start = pos;
-                    while pos < chars.len() && (chars[pos].is_alphanumeric() || chars[pos] == '_') {
-                        pos += 1;
-                    }
-                    
-                    let word = &input[word_start..pos];
-                    match word {
-                        "class" => self.add_token(Token::Class, token_start, 5),
-                        "version" => self.add_token(Token::Version, token_start, 7),
-                        _ => self.add_token(Token::Identifier(word.to_string()), token_start, word.len()),
-                    }
-                }
-                _ => {
-                    // Unexpected character
-                    self.errors.push(LexError::UnexpectedChar { pos, found: c });
-                    pos += 1;
-                }
+            } else {
+                // Somehow pos is out of range
+                break;
             }
         }
         
@@ -282,11 +292,13 @@ impl IntegratedLexer {
     }
 
     /// Get any lexical errors
+    #[must_use]
     pub fn errors(&self) -> &[LexError] {
         &self.errors
     }
 
     /// Get token positions
+    #[must_use]
     pub fn token_positions(&self) -> &[TokenPosition] {
         &self.token_positions
     }
@@ -301,11 +313,13 @@ impl IntegratedLexer {
     }
 
     /// Get the byte position for a token at a specific index
+    #[must_use]
     pub fn get_token_byte_position(&self, token_idx: usize) -> Option<usize> {
         self.token_positions.get(token_idx).map(|pos| pos.byte_offset)
     }
 
     /// Get the token index for a byte position
+    #[must_use]
     pub fn get_token_at_byte_position(&self, byte_pos: usize) -> Option<usize> {
         for (idx, pos) in self.token_positions.iter().enumerate() {
             if byte_pos >= pos.byte_offset && byte_pos < pos.byte_offset + pos.byte_length {
@@ -316,6 +330,14 @@ impl IntegratedLexer {
     }
 
     /// Scan the token stream for class boundaries
+    /// 
+    /// # Errors
+    /// Returns a `ScanError` if there are issues with the structure of the token stream,
+    /// such as unclosed classes or unexpected tokens
+    /// 
+    /// # Panics
+    /// Will panic if the stack is empty but shouldn't be - indicates internal logic error
+    #[allow(clippy::too_many_lines)]
     pub fn scan_boundaries(&self) -> Result<crate::scanner::BoundaryMap, crate::scanner::ScanError> {
         let mut map = crate::scanner::BoundaryMap::new();
         let tokens_len = self.tokens.len();
@@ -327,8 +349,8 @@ impl IntegratedLexer {
         let mut pos = 0;
         
         while pos < tokens_len {
-            match &self.tokens[pos] {
-                Token::Class => {
+            match self.tokens.get(pos) {
+                Some(Token::Class) => {
                     let class_token_pos = pos;
                     pos += 1;
                     
@@ -337,15 +359,15 @@ impl IntegratedLexer {
                         return Err(crate::scanner::ScanError::MissingClassName { position: class_token_pos + 1 });
                     }
                     
-                    let class_name = match &self.tokens[pos] {
-                        Token::Identifier(name) => name.clone(),
+                    let class_name = match self.tokens.get(pos) {
+                        Some(Token::Identifier(name)) => name.clone(),
                         _ => return Err(crate::scanner::ScanError::MissingClassName { position: pos }),
                     };
                     
                     pos += 1;
                     
                     // Find opening brace
-                    if pos >= tokens_len || !matches!(self.tokens[pos], Token::OpenBrace) {
+                    if pos >= tokens_len || !matches!(self.tokens.get(pos), Some(Token::OpenBrace)) {
                         return Err(crate::scanner::ScanError::UnexpectedToken {
                             position: pos,
                             expected: "opening brace",
@@ -367,17 +389,17 @@ impl IntegratedLexer {
                     let depth = stack.len();
                     
                     // Get parent boundary index
-                    let parent_boundary_index = if !stack.is_empty() {
-                        // The parent's boundary index is in the 3rd position in our stack tuple
-                        Some(stack.last().unwrap().3)
-                    } else {
+                    let parent_boundary_index = if stack.is_empty() {
                         None
+                    } else {
+                        // The parent's boundary index is in the 3rd position in our stack tuple
+                        Some(stack.last().expect("Stack shouldn't be empty here").3)
                     };
                     
                     // Add class boundary to the map (initially with placeholder contents range)
                     let boundary_index = map.boundaries.len();
                     map.boundaries.push(crate::scanner::ClassBoundary {
-                        range: class_token_pos..brace_token_pos + 1, // Initial range includes up to opening brace
+                        range: class_token_pos..(brace_token_pos + 1), // Initial range includes up to opening brace
                         parent_id: parent_boundary_index,
                         depth,
                         name: class_name.clone(),
@@ -387,14 +409,14 @@ impl IntegratedLexer {
                     // Push class info to stack with boundary index and parent info
                     stack.push((class_token_pos, class_name, depth, boundary_index, parent_boundary_index));
                 }
-                Token::CloseBrace => {
+                Some(Token::CloseBrace) => {
                     if !stack.is_empty() {
-                        let (class_token_pos, _, _, boundary_index, _) = stack.pop().unwrap();
+                        let (class_token_pos, _, _, boundary_index, _) = stack.pop().expect("Stack shouldn't be empty");
                         
                         // Update the class boundary with complete range
                         if let Some(boundary) = map.boundaries.get_mut(boundary_index) {
                             // Complete range from class token to closing brace (inclusive)
-                            boundary.range = class_token_pos..pos + 1;
+                            boundary.range = class_token_pos..(pos + 1);
                             
                             // Content range from after open brace to before close brace
                             let content_start = boundary.contents_range.start;
@@ -414,7 +436,7 @@ impl IntegratedLexer {
         
         // Check for unclosed classes
         if !stack.is_empty() {
-            let (class_token_pos, _, _, _, _) = stack.last().unwrap();
+            let (class_token_pos, _, _, _, _) = stack.last().expect("Stack shouldn't be empty");
             return Err(crate::scanner::ScanError::UnclosedClass { class_start: *class_token_pos });
         }
         
@@ -443,7 +465,7 @@ impl IntegratedLexer {
 
 /// Process input text and return tokens and any errors
 /// 
-/// A direct replacement for the legacy lex function using IntegratedLexer.
+/// A direct replacement for the legacy lex function using `IntegratedLexer`.
 pub fn tokenize(input: &str) -> (Vec<Token>, Vec<LexError>) {
     let mut lexer = IntegratedLexer::new();
     let tokens = lexer.lex(input).to_vec();

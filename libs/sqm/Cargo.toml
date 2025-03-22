@@ -3,18 +3,20 @@ name = "sqm"
 version = "0.1.0"
 edition = "2021"
 
-[lints]
-workspace = true
-
 [dependencies]
-chumsky = "0.9"
-either = "1.9"
-rayon = "1.8"
-num_cpus = "1.16"
+byteorder = { workspace = true }
+chumsky = { workspace = true }
+num_cpus = "1.16.0"
+serde = { workspace = true }
+thiserror = { workspace = true }
+rayon = "1.8.0"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = "0.5"
 
 [[bench]]
 name = "sqm_benchmark"
 harness = false
+
+[lints]
+clippy.lint_groups_priority = "allow" # Allow lint groups with same priority

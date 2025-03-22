@@ -10,7 +10,7 @@ mod parser;
 mod lexer;
 mod scanner;
 
-pub use parser::{parse_sqm, parse_sqm_with_config, emit_diagnostics, ParseError, ParallelConfig};
+pub use parser::{parse_sqm, parse_sqm_with_config, emit_diagnostics, ParallelConfig};
 pub use scanner::{BoundaryMap, ClassBoundary, ScanError};
 pub use lexer::{Token, TokenPosition, IntegratedLexer};
 

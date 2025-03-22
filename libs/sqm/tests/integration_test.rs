@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use sqm::{parse_sqm, parse_sqm_with_config, Class, Value, 
+use sqm::{parse_sqm, parse_sqm_with_config, Class, Value,
           emit_diagnostics, ParallelConfig};
 
 #[test]
@@ -366,7 +365,7 @@ fn test_find_primary_weapon_recursive() {
         }
         
         // Search in all nested classes
-        for (_, classes) in &class.classes {
+        for classes in class.classes.values() {
             for nested_class in classes {
                 if let Some(found) = find_primary_weapon(nested_class) {
                     return Some(found);
@@ -380,7 +379,7 @@ fn test_find_primary_weapon_recursive() {
     // Start the search from the top-level classes
     let mut found_weapon = None;
     
-    for (_, classes) in &result.classes {
+    for classes in result.classes.values() {
         for class in classes {
             if let Some(weapon) = find_primary_weapon(class) {
                 found_weapon = Some(weapon);

@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use rayon::prelude::*;
-use chumsky::prelude::*;
-
 use crate::{Class, SqmFile, Value};
 use crate::lexer::Token;
-use crate::scanner::{BoundaryMap, ClassBoundary};
-use super::{ParseError, emit_diagnostics};
+use crate::scanner::BoundaryMap;
+use super::ParseError;
 
 /// Configuration for parallel parsing
 #[derive(Debug, Clone)]
@@ -29,6 +26,9 @@ impl Default for ParallelConfig {
     }
 }
 
+// Define a type alias to simplify the complex return type
+type ClassContentsResult = Result<(HashMap<String, Value>, HashMap<String, Vec<Class>>, usize), Box<ParseError>>;
+
 /// Parallel parser that distributes work across multiple threads
 pub struct ParallelParser {
     tokens: Arc<[Token]>,
@@ -43,7 +43,8 @@ impl ParallelParser {
     }
 
     /// Parses the entire SQM file in parallel
-    pub fn parse(&self) -> Result<SqmFile, ParseError> {
+    #[allow(clippy::too_many_lines)]
+    pub fn parse(&self) -> Result<SqmFile, Box<ParseError>> {
         // Initialize the SQF file structure
         let mut version = None;
         let mut defines = Vec::new();
@@ -111,32 +112,32 @@ impl ParallelParser {
     }
     
     /// Parse a class at the given position and return the class and next position
-    fn parse_class_at_pos(&self, pos: usize) -> Result<(Class, usize), ParseError> {
+    fn parse_class_at_pos(&self, pos: usize) -> Result<(Class, usize), Box<ParseError>> {
         let tokens = &self.tokens;
         let mut current_pos = pos;
         
         // Expect "class" token
         if current_pos >= tokens.len() || !matches!(tokens[current_pos], Token::Class) {
-            return Err(ParseError::UnexpectedToken(
-                tokens.get(current_pos).cloned().unwrap_or(Token::Identifier("EOF".to_string()))
-            ));
+            return Err(Box::new(ParseError::UnexpectedToken(
+                tokens.get(current_pos).cloned().unwrap_or_else(|| Token::Identifier("EOF".to_string()))
+            )));
         }
         current_pos += 1;
         
         // Expect class name
         if current_pos >= tokens.len() {
-            return Err(ParseError::UnexpectedEof);
+            return Err(Box::new(ParseError::UnexpectedEof));
         }
         
         let class_name = match &tokens[current_pos] {
             Token::Identifier(name) => name.clone(),
-            token => return Err(ParseError::UnexpectedToken(token.clone())),
+            token => return Err(Box::new(ParseError::UnexpectedToken(token.clone()))),
         };
         current_pos += 1;
         
         // Expect opening brace
         if current_pos >= tokens.len() || !matches!(tokens[current_pos], Token::OpenBrace) {
-            return Err(ParseError::ExpectedOpenBrace);
+            return Err(Box::new(ParseError::ExpectedOpenBrace));
         }
         current_pos += 1;
         
@@ -155,7 +156,8 @@ impl ParallelParser {
     }
     
     /// Parses the contents of a class (properties and subclasses)
-    fn parse_class_contents(&self, start_pos: usize) -> Result<(HashMap<String, Value>, HashMap<String, Vec<Class>>, usize), ParseError> {
+    #[allow(clippy::too_many_lines)]
+    fn parse_class_contents(&self, start_pos: usize) -> ClassContentsResult {
         let tokens = &self.tokens;
         let mut pos = start_pos;
         let mut properties = HashMap::new();
@@ -255,20 +257,15 @@ impl ParallelParser {
                                         if let Ok(num) = val.parse::<f64>() {
                                             array_values.push(Value::Number(num));
                                         }
-                                    } else {
-                                        if let Ok(num) = val.parse::<i64>() {
-                                            array_values.push(Value::Integer(num));
-                                        }
+                                    } else if let Ok(num) = val.parse::<i64>() {
+                                        array_values.push(Value::Integer(num));
                                     }
                                 },
                                 Token::StringLit(val) => {
                                     array_values.push(Value::String(val.clone()));
                                 },
-                                Token::Comma => {
-                                    // Skip comma and continue
-                                },
                                 _ => {
-                                    // Skip unexpected token in array
+                                    // Skip token
                                 }
                             }
                             pos += 1;
@@ -289,10 +286,8 @@ impl ParallelParser {
                                     if let Ok(num) = val.parse::<f64>() {
                                         properties.insert(prop_name, Value::Number(num));
                                     }
-                                } else {
-                                    if let Ok(num) = val.parse::<i64>() {
-                                        properties.insert(prop_name, Value::Integer(num));
-                                    }
+                                } else if let Ok(num) = val.parse::<i64>() {
+                                    properties.insert(prop_name, Value::Integer(num));
                                 }
                             },
                             Token::StringLit(val) => {
@@ -322,14 +317,14 @@ impl ParallelParser {
         
         // If we got here, we didn't find a closing brace
         // We'll return what we have so far and let the caller handle it
-        Err(ParseError::UnexpectedEof)
+        Err(Box::new(ParseError::UnexpectedEof))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chumsky::Parser;
+    
 
     #[test]
     fn test_parallel_parsing() {

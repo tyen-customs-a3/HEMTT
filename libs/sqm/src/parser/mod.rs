@@ -48,6 +48,7 @@ mod tests {
     use std::collections::HashMap;
     use crate::lexer;
     use crate::{Class, Value, SqmFile};
+    use log::debug;
     use super::parse_sqm;
 
     #[test]
@@ -72,19 +73,19 @@ mod tests {
 
         for (input, expected) in test_cases {
             let full_input = format!("class Test {{ {} }};", input);
-            println!("Testing input: {}", full_input);
+            debug!("Testing input: {}", full_input);
             
             let result = match parse_sqm(&full_input) {
                 Ok(r) => r,
                 Err(e) => {
-                    println!("Error parsing: {:?}", e);
+                    debug!("Error parsing: {:?}", e);
                     
                     // Get the lexer output for diagnostic info
                     let (tokens, errors) = lexer::tokenize(&full_input);
                     if !errors.is_empty() {
-                        println!("Lexer errors: {:?}", errors);
+                        debug!("Lexer errors: {:?}", errors);
                     } else {
-                        println!("Tokens: {:?}", tokens);
+                        debug!("Tokens: {:?}", tokens);
                     }
                     
                     panic!("Failed to parse");
@@ -166,4 +167,4 @@ mod tests {
         assert!(result.defines.contains(&"_ARMA_".to_string()));
         assert!(result.defines.contains(&"SOME_VALUE".to_string()));
     }
-} 
+}

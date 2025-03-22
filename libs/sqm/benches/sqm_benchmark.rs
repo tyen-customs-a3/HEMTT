@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use sqm::{parse_sqm, parse_sqm_with_config, ParallelConfig};
+use hemtt_sqm::{parse_sqm, parse_sqm_with_config, ParallelConfig};
 use std::time::Duration;
 use std::fs;
 use std::path::Path;

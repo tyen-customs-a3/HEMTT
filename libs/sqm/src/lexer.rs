@@ -1,4 +1,5 @@
 use std::hash::{Hash, Hasher};
+use log::debug;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
@@ -166,33 +167,37 @@ impl IntegratedLexer {
                         }
                     }
                     '"' => {
-                        // Handle string literals
+                        // Handle string literals with enhanced escape sequence support
                         pos += 1; // Skip opening quote
                         let mut string = String::new();
                         
-                        while pos < chars.len() && chars.get(pos) != Some(&'"') {
-                            if chars.get(pos) == Some(&'\\') && pos + 1 < chars.len() {
-                                // Handle escape sequences
-                                pos += 1;
-                                match chars.get(pos) {
-                                    Some('n') => string.push('\n'),
-                                    Some('r') => string.push('\r'),
-                                    Some('t') => string.push('\t'),
-                                    Some('\\') => string.push('\\'),
-                                    Some('"') => string.push('"'),
-                                    _ => if let Some(ch) = chars.get(pos) {
-                                        string.push(*ch);
-                                    },
+                        while pos < chars.len() {
+                            match chars.get(pos) {
+                                Some(&'"') => {
+                                    // Check for double quote (escaped quote)
+                                    if pos + 1 < chars.len() && chars[pos + 1] == '"' {
+                                        // For SQM format, we need to preserve the exact string representation
+                                        string.push('"');
+                                        string.push('"');
+                                        pos += 2; // Skip both quotes
+                                        continue;
+                                    }
+                                    // Single quote - end of string
+                                    break;
                                 }
-                            } else {
-                                if let Some(ch) = chars.get(pos) {
-                                    string.push(*ch);
+                                Some(&ch) => {
+                                    // For SQM format, we preserve all characters literally, including backslashes
+                                    string.push(ch);
+                                    pos += 1;
                                 }
-                                pos += 1;
+                                None => {
+                                    self.errors.push(LexError::UnterminatedString { start_pos: token_start });
+                                    return &self.tokens;
+                                }
                             }
                         }
                         
-                        if pos < chars.len() && chars.get(pos) == Some(&'"') {
+                        if pos < chars.len() && chars[pos] == '"' {
                             self.add_token(Token::StringLit(string), token_start, pos - token_start + 1);
                             pos += 1; // Skip closing quote
                         } else {
@@ -277,8 +282,8 @@ impl IntegratedLexer {
                         }
                     }
                     _ => {
-                        // Unexpected character
-                        self.errors.push(LexError::UnexpectedChar { pos, found: c });
+                        // Skip unexpected characters without generating errors
+                        // This allows backslashes and other special characters to be ignored at the top level
                         pos += 1;
                     }
                 }
@@ -443,17 +448,17 @@ impl IntegratedLexer {
         // Debug output for verification - only in debug mode or when testing
         #[cfg(any(debug_assertions, test))]
         {
-            eprintln!("Generated boundaries:");
+            debug!("Generated boundaries:");
             for (i, boundary) in map.boundaries.iter().enumerate() {
-                eprintln!("[{}] Class: {}, Range: {:?}, Contents: {:?}, Parent: {:?}, Depth: {}",
+                debug!("[{}] Class: {}, Range: {:?}, Contents: {:?}, Parent: {:?}, Depth: {}",
                     i, boundary.name, boundary.range, boundary.contents_range, boundary.parent_id, boundary.depth);
                 
                 // Verify tokens in content range
-                eprintln!("  Content tokens for {}:", boundary.name);
+                debug!("  Content tokens for {}:", boundary.name);
                 let content_range = boundary.contents_range.clone();
                 for token_idx in content_range {
                     if token_idx < self.tokens.len() {
-                        eprintln!("    Token[{}]: {:?}", token_idx, self.tokens[token_idx]);
+                        debug!("    Token[{}]: {:?}", token_idx, self.tokens[token_idx]);
                     }
                 }
             }

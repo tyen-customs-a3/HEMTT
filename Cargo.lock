@@ -1784,6 +1784,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hemtt-sqm"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+ "chumsky",
+ "criterion",
+ "log",
+ "num_cpus",
+ "rayon",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "hemtt-stringtable"
 version = "1.0.0"
 dependencies = [
@@ -4366,17 +4380,6 @@ checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
 dependencies = [
  "base64ct",
  "der",
-]
-
-[[package]]
-name = "sqm"
-version = "0.1.0"
-dependencies = [
- "chumsky",
- "criterion",
- "either",
- "num_cpus",
- "rayon",
 ]
 
 [[package]]

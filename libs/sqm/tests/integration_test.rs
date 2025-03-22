@@ -1,5 +1,5 @@
-use sqm::{parse_sqm, parse_sqm_with_config, Class, Value,
-          emit_diagnostics, ParallelConfig};
+use hemtt_sqm::{parse_sqm, parse_sqm_with_config, Class, Value,
+          emit_diagnostics, ParallelConfig, IntegratedLexer};
 
 #[test]
 fn test_simple_class() {
@@ -42,7 +42,7 @@ fn test_array_values() {
     "#;
 
     // Debug the actual tokens 
-    let mut lexer = sqm::IntegratedLexer::new();
+    let mut lexer = hemtt_sqm::IntegratedLexer::new();
     let tokens = lexer.lex(input).to_vec(); // Convert to owned Vec to avoid borrow issues
     println!("Raw tokens from lexer:");
     for (i, token) in tokens.iter().enumerate() {
@@ -405,4 +405,107 @@ fn test_find_primary_weapon_recursive() {
     let muzzle_mag = &weapon.classes["primaryMuzzleMag"][0];
     assert_eq!(muzzle_mag.properties.get("name").unwrap(), &Value::String("rhs_30Rnd_545x39_7N10_AK".to_string()));
     assert_eq!(muzzle_mag.properties.get("ammoLeft").unwrap(), &Value::Integer(30));
+}
+
+#[test]
+fn test_parse_mission_files() {
+    let test_files = ["tests/fixtures/mission_test1.sqm", "tests/fixtures/mission_test2.sqm"];
+    
+    for file_path in test_files {
+        // Read the mission file
+        let input = std::fs::read_to_string(file_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {}", file_path, e));
+        
+        println!("\nTesting file: {}", file_path);
+        
+        // Create a lexer instance for diagnostic information
+        let mut lexer = IntegratedLexer::new();
+        let tokens = lexer.lex(&input);
+        
+        // Print token information if in verbose mode
+        if std::env::var("RUST_TEST_NOCAPTURE").is_ok() {
+            println!("Token count: {}", tokens.len());
+            println!("First few tokens:");
+            for (i, token) in tokens.iter().take(5).enumerate() {
+                println!("  Token[{}]: {:?}", i, token);
+            }
+        }
+        
+        // Scan for class boundaries
+        match lexer.scan_boundaries() {
+            Ok(boundaries) => {
+                println!("Successfully scanned class boundaries");
+                println!("Found {} class boundaries", boundaries.boundaries.len());
+            }
+            Err(err) => {
+                panic!("Failed to scan boundaries in {}: {:?}", file_path, err);
+            }
+        }
+        
+        // Try to parse the file
+        match parse_sqm(&input) {
+            Ok(result) => {
+                println!("Successfully parsed {}", file_path);
+                println!("Found {} top-level classes", result.classes.len());
+                if let Some(version) = result.version {
+                    println!("SQM Version: {}", version);
+                }
+                println!("Define directives: {}", result.defines.len());
+                
+                // Print top-level class names
+                println!("Top-level classes:");
+                for class_name in result.classes.keys() {
+                    println!("  - {}", class_name);
+                }
+            }
+            Err(err) => {
+                // Generate and print detailed diagnostics
+                let diagnostics = emit_diagnostics(&input, &err);
+                panic!("Failed to parse {}\nDiagnostic output:\n{}", file_path, diagnostics);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_string_with_script() {
+    let input = r#"
+        class Item0 {
+            init = "this addAction [""Flip vehicle"",{ \n params [""_vehicle"", ""_caller"", ""_actionId"", ""_arguments""]; \n _normalVec = surfaceNormal getPos _vehicle; \n if (!local _vehicle) then { \n [_vehicle,_normalVec] remoteExec [""setVectorUp"",_vehicle]; \n } else { \n _vehicle setVectorUp _normalVec; \n }; \n _vehicle setPosATL [getPosATL _vehicle select 0, getPosATL _vehicle select 1, 0]; \n},[],1.5,true,true,"""",""(vectorUp _target) vectorCos (surfaceNormal getPos _target) <0.5"",5];";
+        };
+    "#;
+
+    let result = parse_sqm(input).unwrap();
+    
+    let item = result.classes.get("Item0").unwrap();
+    assert_eq!(item.len(), 1);
+    let item = &item[0];
+
+    // Verify the init script is preserved exactly as provided
+    match item.properties.get("init") {
+        Some(Value::String(script)) => {
+            println!("Parsed script: {}", script);
+            // Check for exact string patterns as they should appear in SQM format
+            assert!(script.contains(r#"this addAction"#));
+            assert!(script.contains(r#"[""Flip vehicle"","#));
+            assert!(script.contains(r#"params [""_vehicle"""#));
+            assert!(script.contains(r#"_normalVec = surfaceNormal getPos _vehicle"#));
+            assert!(script.contains(r#"\n"#)); // Should preserve \n literally
+            assert!(script.contains(r#"[""setVectorUp"""#));
+            assert!(script.contains(r#"_vehicle setVectorUp _normalVec"#));
+            
+            // Print the exact string for debugging
+            println!("String patterns to match:");
+            println!("1. {}", r#"[""Flip vehicle"","#);
+            println!("2. {}", r#"params [""_vehicle"""#);
+            println!("3. {}", r#"\n"#);
+            println!("Found in script:");
+            println!("1. {}", script.contains(r#"[""Flip vehicle"","#));
+            println!("2. {}", script.contains(r#"params [""_vehicle"""#));
+            println!("3. {}", script.contains(r#"\n"#));
+            println!("Full script:");
+            println!("{}", script);
+        },
+        other => panic!("Expected init property to be a string, got: {:?}", other),
+    }
 }

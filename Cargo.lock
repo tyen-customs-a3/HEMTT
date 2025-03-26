@@ -1770,6 +1770,7 @@ dependencies = [
  "automod",
  "byteorder",
  "chumsky",
+ "criterion",
  "float-ord",
  "hemtt-common",
  "hemtt-lzo",

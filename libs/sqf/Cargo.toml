@@ -35,3 +35,8 @@ parser = ["chumsky"]
 hemtt-preprocessor = { path = "../preprocessor" }
 insta = { workspace = true }
 paste = { workspace = true }
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "sqf_parser"
+harness = false

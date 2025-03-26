@@ -3,8 +3,6 @@ use hemtt_sqf::parser::{self, database::Database};
 use hemtt_workspace::{LayerType, WorkspacePath, reporting::Processed};
 use std::sync::Arc;
 
-const REAL_WORLD_SQF: &str = include_str!("../tests/fixtures/arsenal.sqf");
-
 // Generate synthetic SQF code with different complexities
 fn generate_synthetic_sqf(size: usize, complexity: &str) -> String {
     match complexity {
@@ -77,20 +75,6 @@ fn process_str(input: &str) -> Processed {
     hemtt_preprocessor::Processor::run(&temp_file).unwrap()
 }
 
-fn bench_real_world(c: &mut Criterion) {
-    let mut group = c.benchmark_group("real_world");
-    let database = Database::a3(false);
-    
-    group.bench_function("arsenal_sqf", |b| {
-        b.iter(|| {
-            let processed = process_str(black_box(REAL_WORLD_SQF));
-            parser::run(&database, &processed).unwrap()
-        });
-    });
-
-    group.finish();
-}
-
 fn bench_synthetic(c: &mut Criterion) {
     let mut group = c.benchmark_group("synthetic");
     let database = Database::a3(false);
@@ -125,5 +109,5 @@ fn bench_synthetic(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_real_world, bench_synthetic);
+criterion_group!(benches, bench_synthetic);
 criterion_main!(benches); 

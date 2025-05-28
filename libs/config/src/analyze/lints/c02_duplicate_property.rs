@@ -99,18 +99,18 @@ fn duplicate_properties_inner(
                 name, properties, ..
             }) => {
                 duplicate_properties_inner(
-                    &format!("{}.{}", scope, name.value.to_lowercase()),
+                    &format!("{}.{}", scope, name.value.to_ascii_lowercase()),
                     properties,
                     seen,
                 );
                 let entry = seen
-                    .entry(format!("{}.{}", scope, name.value.to_lowercase()))
+                    .entry(format!("{}.{}", scope, name.value.to_ascii_lowercase()))
                     .or_default();
                 entry.push((true, name.clone()));
             }
             Property::Entry { name, .. } | Property::MissingSemicolon(name, _) => {
                 let entry = seen
-                    .entry(format!("{}.{}", scope, name.value.to_lowercase()))
+                    .entry(format!("{}.{}", scope, name.value.to_ascii_lowercase()))
                     .or_default();
                 entry.push((false, name.clone()));
             }

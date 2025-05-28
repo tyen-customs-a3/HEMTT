@@ -7,7 +7,7 @@ use crate::{Str, MacroExpression, Value};
 pub fn macro_name() -> impl Parser<char, String, Error = Simple<char>> {
     let ident_char = filter(|c: &char| c.is_ascii_alphabetic() || *c == '_');
     let ident_rest = filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_');
-    
+
     ident_char
         .then(ident_rest.repeated())
         .map(|(first, rest)| {
@@ -62,15 +62,17 @@ pub fn macro_arg() -> impl Parser<char, Value, Error = Simple<char>> {
                     .delimited_by(just('('), just(')'))
             )
             .map_with_span(|(name, args), span| {
-                // Convert args to strings
-                let arg_strings = args.into_iter()
-                    .map(|v| match v {
+                // Convert args to strings - optimized with Vec::with_capacity
+                let mut arg_strings = Vec::with_capacity(args.len());
+                for v in args {
+                    let arg_str = match v {
                         Value::Str(s) => s.value().to_string(),
                         Value::Macro(m) => m.to_string(),
                         _ => String::new()
-                    })
-                    .collect();
-                
+                    };
+                    arg_strings.push(arg_str);
+                }
+
                 Value::Macro(MacroExpression::new(name.clone(), arg_strings, span))
             });
 
@@ -92,15 +94,17 @@ fn macro_call() -> impl Parser<char, MacroExpression, Error = Simple<char>> {
                 .delimited_by(just('('), just(')'))
         )
         .map_with_span(|(name, args), span| {
-            // Convert args to strings
-            let arg_strings = args.into_iter()
-                .map(|v| match v {
+            // Convert args to strings - optimized with Vec::with_capacity
+            let mut arg_strings = Vec::with_capacity(args.len());
+            for v in args {
+                let arg_str = match v {
                     Value::Str(s) => s.value().to_string(),
                     Value::Macro(m) => m.to_string(),
                     _ => String::new()
-                })
-                .collect();
-            
+                };
+                arg_strings.push(arg_str);
+            }
+
             MacroExpression::new(name, arg_strings, span)
         });
 
@@ -220,14 +224,14 @@ mod tests {
         let parsed = get_macro_expr(result);
         assert_eq!(parsed.name.value, "WEAPON_FIRE_END");
         assert_eq!(parsed.args.len(), 0);
-        
+
         // Also test with empty parentheses
         let result = macro_expr().parse("WEAPON_FIRE_BEGIN()").unwrap();
         let parsed = get_macro_expr(result);
         assert_eq!(parsed.name.value, "WEAPON_FIRE_BEGIN");
         assert_eq!(parsed.args.len(), 1);
         assert_eq!(parsed.args[0].value, "");
-        
+
         let result = macro_expr().parse("WEAPON_FIRE_END()").unwrap();
         let parsed = get_macro_expr(result);
         assert_eq!(parsed.name.value, "WEAPON_FIRE_END");
@@ -252,4 +256,4 @@ mod tests {
         let result = macro_expr().parse("OUTER(INNER(unclosed,4)");
         assert!(result.is_err());
     }
-} 
+}

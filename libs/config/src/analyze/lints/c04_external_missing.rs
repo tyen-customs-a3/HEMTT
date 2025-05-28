@@ -85,7 +85,7 @@ fn check(properties: &[Property], defined: &mut HashSet<String>, processed: &Pro
                     codes.extend(check(properties, defined, processed));
                 }
                 Class::External { name } => {
-                    let name = name.value.to_lowercase();
+                    let name = name.value.to_ascii_lowercase();
                     defined.insert(name);
                 }
                 Class::Local {
@@ -94,9 +94,9 @@ fn check(properties: &[Property], defined: &mut HashSet<String>, processed: &Pro
                     properties,
                     err_missing_braces: _,
                 } => {
-                    let name = name.value.to_lowercase();
+                    let name = name.value.to_ascii_lowercase();
                     if let Some(parent) = parent {
-                        let parent = parent.value.to_lowercase();
+                        let parent = parent.value.to_ascii_lowercase();
                         if parent != name && !defined.contains(&parent) {
                             codes.push(Arc::new(CodeC04ExternalMissing::new(c.clone(), processed)));
                         }

@@ -22,12 +22,34 @@ pub struct LintData {
 
 lint_manager!(config, vec![]);
 
+impl LintData {
+    pub fn new(path: String) -> Self {
+        Self {
+            path,
+            localizations: Arc::new(Mutex::new(Vec::with_capacity(16))),
+        }
+    }
+    
+    /// Optimized path joining method
+    pub fn with_child_path(&self, name: &str) -> Self {
+        let mut path = String::with_capacity(self.path.len() + name.len() + 1);
+        path.push_str(&self.path);
+        path.push('/');
+        path.push_str(name);
+        
+        Self {
+            path,
+            localizations: self.localizations.clone(),
+        }
+    }
+}
+
 pub use cfgpatch::CfgPatch;
 pub use chumsky::ChumskyCode;
 
 use crate::{Array, Class, Config, Expression, Item, Number, Property, Str, Value, MacroExpression};
 
-/// Trait for rapifying objects
+/// Trait for analyzing objects with optimized implementations
 pub trait Analyze: Sized + 'static {
     fn analyze(
         &self,
@@ -36,7 +58,8 @@ pub trait Analyze: Sized + 'static {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        // Pre-allocate with reasonable capacity based on typical usage
+        let mut codes = Vec::with_capacity(4);
         codes.extend(manager.run(data, project, Some(processed), self));
         codes
     }
@@ -54,7 +77,10 @@ impl Analyze for Config {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        // Estimate capacity based on config size and typical lint rules
+        let estimated_capacity = self.0.len().max(8);
+        let mut codes = Vec::with_capacity(estimated_capacity);
+        
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(manager.run(data, project, Some(processed), &self.to_class()));
         codes.extend(
@@ -74,22 +100,27 @@ impl Analyze for Class {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::with_capacity(8);
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
-            Self::External { .. } => vec![],
+            Self::External { .. } => Vec::new(),
             Self::Local { properties, .. } | Self::Root { properties, .. } => {
-                let data = LintData {
-                    path: self.name().map_or_else(
-                        || data.path.clone(),
-                        |name| format!("{}/{}", data.path, name.value),
-                    ),
-                    localizations: data.localizations.clone(),
+                // Use optimized path construction
+                let data = if let Some(name) = self.name() {
+                    data.with_child_path(&name.value)
+                } else {
+                    LintData {
+                        path: data.path.clone(),
+                        localizations: data.localizations.clone(),
+                    }
                 };
-                properties
-                    .iter()
-                    .flat_map(|p| p.analyze(&data, project, processed, manager))
-                    .collect::<Vec<_>>()
+                
+                // Pre-allocate with estimated capacity
+                let mut property_codes = Vec::with_capacity(properties.len() * 2);
+                for property in properties {
+                    property_codes.extend(property.analyze(&data, project, processed, manager));
+                }
+                property_codes
             }
         });
         codes
@@ -104,13 +135,13 @@ impl Analyze for Property {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::with_capacity(4);
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
             Self::Class(class) => class.analyze(data, project, processed, manager),
-            Self::Entry { .. } => vec![],
-            Self::Delete(_) | Self::MissingSemicolon(_, _) => vec![],
-            Self::Enum(_) => vec![],
+            Self::Entry { .. } => Vec::new(),
+            Self::Delete(_) | Self::MissingSemicolon(_, _) => Vec::new(),
+            Self::Enum(_) => Vec::new(),
         });
         codes
     }
@@ -124,7 +155,7 @@ impl Analyze for Value {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::with_capacity(4);
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
             Self::Str(s) => s.analyze(data, project, processed, manager),
@@ -134,7 +165,7 @@ impl Analyze for Value {
                 a.analyze(data, project, processed, manager)
             }
             Self::Macro(m) => m.analyze(data, project, processed, manager),
-            Self::Invalid(_) => vec![],
+            Self::Invalid(_) => Vec::new(),
         });
         codes
     }
@@ -148,7 +179,7 @@ impl Analyze for Array {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::with_capacity(4 + self.items.len());
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(
             self.items
@@ -167,17 +198,20 @@ impl Analyze for Item {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::with_capacity(4);
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
             Self::Str(s) => s.analyze(data, project, processed, manager),
             Self::Number(n) => n.analyze(data, project, processed, manager),
             Self::Macro(m) => m.analyze(data, project, processed, manager),
-            Self::Array(a) => a
-                .iter()
-                .flat_map(|i| i.analyze(data, project, processed, manager))
-                .collect::<Vec<_>>(),
-            Self::Invalid(_) => vec![],
+            Self::Array(a) => {
+                let mut array_codes = Vec::with_capacity(a.len() * 2);
+                for item in a {
+                    array_codes.extend(item.analyze(data, project, processed, manager));
+                }
+                array_codes
+            },
+            Self::Invalid(_) => Vec::new(),
         });
         codes
     }
@@ -191,14 +225,12 @@ impl Analyze for MacroExpression {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::with_capacity(4 + self.args.len());
         codes.extend(manager.run(data, project, Some(processed), self));
-        // Analyze macro arguments
-        codes.extend(
-            self.args
-                .iter()
-                .flat_map(|arg| arg.analyze(data, project, processed, manager)),
-        );
+        // Analyze macro arguments with pre-allocated capacity
+        for arg in &self.args {
+            codes.extend(arg.analyze(data, project, processed, manager));
+        }
         codes
     }
 }

@@ -93,7 +93,7 @@ pub fn check(properties: &[Property], processed: &Processed) -> Codes {
                 }
                 Class::External { name } => {
                     defined
-                        .entry(name.value.to_lowercase())
+                        .entry(name.value.to_ascii_lowercase())
                         .or_default()
                         .push(c.clone());
                 }
@@ -105,7 +105,7 @@ pub fn check(properties: &[Property], processed: &Processed) -> Codes {
                 } => {
                     codes.extend(check(properties, processed));
                     defined
-                        .entry(name.value.to_lowercase())
+                        .entry(name.value.to_ascii_lowercase())
                         .or_default()
                         .push(c.clone());
                 }

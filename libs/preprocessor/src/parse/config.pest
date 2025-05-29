@@ -25,7 +25,8 @@ right_angle = { ">" }
 equals = { "=" }
 enum_keyword = { "enum" }
 semicolon = { ";" }
-unicode = { LETTER | MARK | NUMBER | SYMBOL | PUNCTUATION | MATH | OTHER_MATH }
+unicode_spacing_char = { SPACE_SEPARATOR } // Pest's built-in SPACE_SEPARATOR rule for Unicode space characters
+unicode = { LETTER | MARK | NUMBER | SYMBOL | PUNCTUATION | MATH | OTHER_MATH | unicode_spacing_char }
 newline = { NEWLINE }
 
 space = { " " }

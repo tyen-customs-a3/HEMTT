@@ -184,6 +184,7 @@ impl Parse for Symbol {
             Rule::enum_keyword => Self::Enum,
             Rule::semicolon => Self::Semicolon,
             Rule::unicode => Self::Unicode(pair.as_str().to_string()),
+            Rule::unicode_spacing_char => Self::Unicode(pair.as_str().to_string()),
             Rule::newline => Self::Newline,
             Rule::space => Self::Whitespace(Whitespace::Space),
             Rule::tab => Self::Whitespace(Whitespace::Tab),
@@ -228,5 +229,44 @@ mod tests {
             .unwrap();
         let tokens = crate::parse::file(&test).unwrap();
         assert_eq!(tokens.len(), content.chars().count() + 1); // +1 for EOI
+    }
+
+    #[test]
+    fn non_breaking_space() {
+        let workspace = hemtt_workspace::Workspace::builder()
+            .memory()
+            .finish(None, false, &hemtt_common::config::PDriveOption::Disallow)
+            .unwrap();
+        let test = workspace.join("test.hpp").unwrap(); // Explicitly construct string with non-breaking space (U+00A0)
+        let nbsp = '\u{00A0}'; // non-breaking space character
+        let content = format!("value = \"test{}test\";", nbsp);
+        println!("Content contains NBSP: {}", content.contains('\u{00A0}'));
+        println!("Content: {:?}", content);
+        test.create_file()
+            .unwrap()
+            .write_all(content.as_bytes())
+            .unwrap();
+
+        let tokens = crate::parse::file(&test).unwrap();
+        // Should parse successfully without errors
+        assert!(tokens.len() > 0);
+
+        // Debug: print all tokens to see what we're getting
+        for token in &tokens {
+            println!("Token: {:?}", token.symbol());
+        }
+
+        // The non-breaking space should be tokenized as Unicode
+        let has_unicode_space = tokens.iter().any(|token| {
+            if let hemtt_workspace::reporting::Symbol::Unicode(s) = token.symbol() {
+                s.contains('\u{00A0}') // non-breaking space
+            } else {
+                false
+            }
+        });
+        assert!(
+            has_unicode_space,
+            "Non-breaking space should be tokenized as Unicode"
+        );
     }
 }

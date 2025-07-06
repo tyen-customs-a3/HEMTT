@@ -12,16 +12,17 @@ pub fn value() -> impl Parser<char, Value, Error = Simple<char>> {
         super::macro_expr::macro_expr(),
         math().map(Value::Number),
         super::number::number().map(Value::Number),
-        // Fall back to treating complex expressions as strings
-        complex_expression().map(Value::Str),
+        // Add support for identifiers and simple expressions as fallback
+        identifier_or_expression().map(Value::Str),
     ))
 }
 
-/// Parse complex expressions that can't be handled by the math parser
-/// These are expressions that contain identifiers, function calls, etc.
-pub fn complex_expression() -> impl Parser<char, crate::Str, Error = Simple<char>> {
-    // Parse any sequence of characters that ends with a semicolon or contains complex tokens
-    filter(|c: &char| !matches!(*c, ';' | '}' | '{'))
+
+/// Parse identifiers or simple expressions as fallback
+pub fn identifier_or_expression() -> impl Parser<char, crate::Str, Error = Simple<char>> {
+    // Parse any sequence of characters that looks like an identifier or expression
+    // This is a simple fallback for things that don't match other patterns
+    filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_' || matches!(*c, '+' | '-' | '*' | '/' | '%' | '^' | '(' | ')' | '[' | ']' | ',' | '.' | ' '))
         .repeated()
         .at_least(1)
         .collect::<String>()
@@ -32,8 +33,6 @@ pub fn complex_expression() -> impl Parser<char, crate::Str, Error = Simple<char
 }
 
 /// Handles simple math expressions
-/// This is a simpler implementation that doesn't try to be too clever
-/// but handles basic arithmetic expressions
 pub fn math() -> impl Parser<char, Number, Error = Simple<char>> {
     choice((
         super::number::number().map(|n| n.to_string()),
@@ -55,7 +54,6 @@ pub fn math() -> impl Parser<char, Number, Error = Simple<char>> {
         let number = Number::try_evaulation(&expr, span.clone());
         number.map_or_else(
             || {
-                // Pre-allocate error message capacity for optimization
                 let mut msg = String::with_capacity(expr.len() + 32);
                 msg.push_str(&expr);
                 msg.push_str(" is not a valid math expression");

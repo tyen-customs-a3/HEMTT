@@ -532,6 +532,79 @@ test_config_parse!(
     "Failed to parse complex nested macro expressions"
 );
 
+#[test]
+fn test_factor_expression_parsing() {
+    // Test the original problematic expression that was simplified
+    let original_config = r#"
+    #define FUNC1(val,from,to) (val factor[from,to])
+    #define FUNC2(val,from0,to0,from1,to1) (FUNC1(val,from0,to0) * FUNC1(val,to1,from1))
+    #define FUNC3(val,from,band0,to,band1) FUNC2(val,from,(from+band0),to,(to+band1))
+    
+    class Test {
+        foo = 0.9 + FUNC3(value,100,200,800,100)*0.2;
+    };
+    "#;
+
+    println!("Testing original problematic expression...");
+    let result = parse_config(original_config);
+    match result {
+        Ok(_) => println!("SUCCESS: Original config parsed successfully"),
+        Err(errors) => {
+            println!("FAILED: Original config parsing failed with {} errors", errors.len());
+            for error in errors {
+                if let Some(diag) = error.diagnostic() {
+                    eprintln!("Error: {}", diag.to_string(&hemtt_workspace::reporting::WorkspaceFiles::new()));
+                }
+            }
+        }
+    }
+
+    // Test the expanded expression directly
+    let expanded_config = r#"
+    class Test {
+        foo = 0.9 + ((value factor[100,(100+200)]) * (value factor[(800+100),800]))*0.2;
+    };
+    "#;
+
+    println!("\nTesting expanded expression directly...");
+    let result = parse_config(expanded_config);
+    match result {
+        Ok(_) => println!("SUCCESS: Expanded config parsed successfully"),
+        Err(errors) => {
+            println!("FAILED: Expanded config parsing failed with {} errors", errors.len());
+            for error in errors {
+                if let Some(diag) = error.diagnostic() {
+                    eprintln!("Error: {}", diag.to_string(&hemtt_workspace::reporting::WorkspaceFiles::new()));
+                }
+            }
+        }
+    }
+    
+    // Test simpler factor expression
+    let simple_config = r#"
+    class Test {
+        foo = value factor[100,200];
+    };
+    "#;
+
+    println!("\nTesting simple factor expression...");
+    let result = parse_config(simple_config);
+    match result {
+        Ok(_) => println!("SUCCESS: Simple factor config parsed successfully"),
+        Err(errors) => {
+            println!("FAILED: Simple factor config parsing failed with {} errors", errors.len());
+            for error in errors {
+                if let Some(diag) = error.diagnostic() {
+                    eprintln!("Error: {}", diag.to_string(&hemtt_workspace::reporting::WorkspaceFiles::new()));
+                }
+            }
+        }
+    }
+    
+    // For now, all of these should fail since we haven't implemented factor parsing yet
+    // This test is just to document the issue
+}
+
 test_config_parse!(
     test_macro_with_parameters,
     r#"

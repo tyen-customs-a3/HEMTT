@@ -6,12 +6,14 @@ use crate::Config;
 
 use self::property::property;
 
-mod array;
-mod ident;
-mod number;
-mod property;
-mod str;
-mod value;
+pub mod array;
+pub mod ident;
+pub mod macro_expr;
+pub mod number;
+pub mod property;
+pub mod str;
+pub mod value;
+pub mod eval;
 
 /// Parse a config file.
 pub fn config() -> impl Parser<char, Config, Error = Simple<char>> {
@@ -19,6 +21,12 @@ pub fn config() -> impl Parser<char, Config, Error = Simple<char>> {
         property()
             .padded()
             .repeated()
+            .recover_with(nested_delimiters(
+                '{',
+                '}',
+                [('[', ']'), ('(', ')')],
+                |_| vec![]
+            ))
             .delimited_by(empty(), end())
             .map(Config),
         end().padded().map(|()| Config(vec![])),

@@ -1,0 +1,23 @@
+[package]
+name = "hemtt-sqm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+byteorder = { workspace = true }
+chumsky = { workspace = true }
+num_cpus = "1.16.0"
+serde = { workspace = true }
+thiserror = { workspace = true }
+rayon = "1.8.0"
+log = "0.4.20"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "sqm_benchmark"
+harness = false
+
+[lints]
+clippy.lint_groups_priority = "allow" # Allow lint groups with same priority

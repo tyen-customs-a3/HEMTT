@@ -99,9 +99,16 @@ fn generate_large_mixed_structure(classes: usize, max_depth: usize, properties_p
     content
 }
 
-fn read_fixture_file(file_path: &str) -> String {
-    fs::read_to_string(Path::new(file_path))
-        .unwrap_or_else(|_| panic!("Failed to read fixture file: {}", file_path))
+fn read_fixture_file(file_path: &str) -> Option<String> {
+    fs::read_to_string(Path::new(file_path)).ok()
+}
+
+fn generate_fallback_mission(size: &str) -> String {
+    match size {
+        "small" => generate_deep_nested_class(3, 5),
+        "large" => generate_large_mixed_structure(25, 4, 10),
+        _ => generate_wide_structure(10, 5),
+    }
 }
 
 fn bench_parsing(c: &mut Criterion) {
@@ -153,9 +160,11 @@ fn bench_real_world(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(15));
     group.sample_size(20);
     
-    // Load real-world SQM files
-    let mission_small = read_fixture_file("tests/fixtures/mission_small.sqm");
-    let mission_large = read_fixture_file("tests/fixtures/mission_large.sqm");
+    // Load real-world SQM files or use generated fallbacks
+    let mission_small = read_fixture_file("tests/fixtures/mission_small.sqm")
+        .unwrap_or_else(|| generate_fallback_mission("small"));
+    let mission_large = read_fixture_file("tests/fixtures/mission_large.sqm")
+        .unwrap_or_else(|| generate_fallback_mission("large"));
     
     // Test with default configuration
     group.bench_with_input(

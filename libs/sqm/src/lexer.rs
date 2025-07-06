@@ -282,9 +282,14 @@ impl IntegratedLexer {
                         }
                     }
                     _ => {
-                        // Skip unexpected characters without generating errors
-                        // This allows backslashes and other special characters to be ignored at the top level
-                        pos += 1;
+                        // Generate error for truly unexpected characters
+                        // Only skip whitespace and common non-problematic characters
+                        if c.is_whitespace() || c == '\\' {
+                            pos += 1;
+                        } else {
+                            self.errors.push(LexError::UnexpectedChar { pos, found: c });
+                            pos += 1;
+                        }
                     }
                 }
             } else {

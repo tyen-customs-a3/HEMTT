@@ -27,6 +27,8 @@ pub enum ParseError {
     LexError(LexError),
     /// Error in the scanner
     ScanError(ScanError),
+    /// Input file is too large to process safely
+    InputTooLarge(usize),
 }
 
 /// Build a nice error message from a parsing error
@@ -191,6 +193,9 @@ pub fn emit_diagnostics(src: &str, error: &ParseError) -> String {
         }
         ParseError::ExpectedEqualsOrBracket => {
             "Expected equals sign or bracket".to_string()
+        }
+        ParseError::InputTooLarge(size) => {
+            format!("Input file is too large: {} bytes (maximum 100MB allowed)", size)
         }
     }
 }

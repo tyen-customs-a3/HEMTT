@@ -24,6 +24,12 @@ pub fn parse_sqm(input: &str) -> Result<SqmFile, Box<ParseError>> {
 pub fn parse_sqm_with_config<S: AsRef<str>>(input: S, config: ParallelConfig) -> Result<SqmFile, Box<ParseError>> {
     let input_str = input.as_ref();
     
+    // Input size validation to prevent memory exhaustion
+    const MAX_INPUT_SIZE: usize = 100 * 1024 * 1024; // 100MB limit
+    if input_str.len() > MAX_INPUT_SIZE {
+        return Err(Box::new(ParseError::InputTooLarge(input_str.len())));
+    }
+    
     // Use the integrated lexer for both tokenization and boundary scanning
     let mut integrated_lexer = IntegratedLexer::new();
     let tokens = integrated_lexer.lex(input_str).to_vec();

@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::{Class, Ident, Value};
+use crate::{Class, Ident, Value, EnumDef, MacroExpression};
 
 #[derive(Debug, Clone, PartialEq)]
 /// A property of a class
@@ -20,6 +20,15 @@ pub enum Property {
     Delete(Ident),
     /// A property that is missing a semicolon
     MissingSemicolon(Ident, Range<usize>),
+    /// An enum definition
+    Enum(EnumDef),
+    /// A standalone macro expression
+    Macro {
+        /// The macro expression
+        expression: MacroExpression,
+        /// The identifier representation of the macro
+        name: Ident,
+    },
 }
 
 impl Property {
@@ -28,10 +37,12 @@ impl Property {
     ///
     /// # Panics
     /// If this is a [`Class::Root`], which should never occur
-    pub const fn name(&self) -> &Ident {
+    pub fn name(&self) -> &Ident {
         match self {
             Self::Class(c) => c.name().expect("root should not be a property"),
             Self::MissingSemicolon(name, _) | Self::Delete(name) | Self::Entry { name, .. } => name,
+            Self::Enum(e) => e.name(),
+            Self::Macro { name, .. } => name,
         }
     }
 

@@ -8,6 +8,7 @@ impl std::fmt::Display for Value {
             Self::Expression(expression) => write!(f, "{expression}"),
             Self::Array(array) | Self::UnexpectedArray(array) => write!(f, "{array}"),
             Self::Invalid(_) => unreachable!(),
+            Self::Macro(m) => write!(f, "{}", m),
         }
     }
 }

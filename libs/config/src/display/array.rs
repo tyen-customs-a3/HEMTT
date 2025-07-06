@@ -44,6 +44,7 @@ impl std::fmt::Display for Item {
                 write!(f, "}}")
             }
             Self::Invalid(_) => unreachable!(),
+            Self::Macro(m) => write!(f, "{}", m),
         }
     }
 }

@@ -61,6 +61,7 @@ impl Rapify for Item {
         match self {
             Self::Str(s) => s.rapify(output, offset),
             Self::Number(n) => n.rapify(output, offset),
+            Self::Macro(m) => m.rapify(output, offset),
             Self::Array(a) => {
                 let mut written = output.write_compressed_int(a.len() as u32)?;
                 for item in a {
@@ -77,6 +78,7 @@ impl Rapify for Item {
         match self {
             Self::Str(s) => s.rapified_length(),
             Self::Number(n) => n.rapified_length(),
+            Self::Macro(m) => m.rapified_length(),
             Self::Array(a) => {
                 compressed_int_len(a.len() as u32)
                     + usize::sum(a.iter().map(|e| e.rapified_length() + 1))
@@ -89,6 +91,7 @@ impl Rapify for Item {
         match self {
             Self::Str(s) => s.rapified_code(),
             Self::Number(n) => n.rapified_code(),
+            Self::Macro(m) => m.rapified_code(),
             Self::Array(_) => 3,
             Self::Invalid(_) => unreachable!(),
         }

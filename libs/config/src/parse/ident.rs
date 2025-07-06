@@ -3,10 +3,14 @@ use chumsky::prelude::*;
 use crate::Ident;
 
 pub fn ident() -> impl Parser<char, Ident, Error = Simple<char>> {
-    one_of("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_")
-        .repeated()
-        .at_least(1)
-        .collect::<String>()
+    // Identifiers should start with a letter or underscore, then allow alphanumeric and underscore
+    filter(|c: &char| c.is_ascii_alphabetic() || *c == '_')
+        .then(filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_').repeated())
+        .map(|(first, rest)| {
+            let mut ident = first.to_string();
+            ident.extend(rest);
+            ident
+        })
         .map_with_span(|value, span| Ident { value, span })
 }
 

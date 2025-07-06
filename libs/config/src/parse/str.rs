@@ -3,11 +3,29 @@ use chumsky::prelude::*;
 use crate::Str;
 
 pub fn string(delimiter: char) -> impl Parser<char, Str, Error = Simple<char>> {
-    let content = just(delimiter).not().or(just([delimiter; 2]).to(delimiter));
+    // Support both backslash escaping (\") and double quote escaping ("") for compatibility
+    let backslash_escape = just('\\').ignore_then(choice((
+        just(delimiter).to(delimiter),
+        just('\\').to('\\'),
+        just('n').to('\n'),
+        just('t').to('\t'),
+        just('r').to('\r'),
+        just('\n').to('\0'), // Backslash-newline escapes are removed later
+    )));
+    
+    let double_quote_escape = just([delimiter; 2]).to(delimiter);
+    
+    let content = choice((
+        backslash_escape,
+        double_quote_escape,
+        filter(move |c: &char| *c != delimiter && *c != '\\'),
+    ));
+    
     let segment = just(delimiter)
         .ignore_then(content.repeated())
         .then_ignore(just(delimiter))
         .collect();
+        
     segment
         .separated_by(just("\\n").padded())
         .at_least(1)
@@ -18,7 +36,8 @@ pub fn string(delimiter: char) -> impl Parser<char, Str, Error = Simple<char>> {
                 .into_iter()
                 .collect::<Vec<_>>()
                 .join("\n")
-                .replace("\\\n", ""),
+                .replace("\\\n", "")
+                .replace('\0', ""), // Remove null chars that represent escaped newlines
             span,
         })
 }

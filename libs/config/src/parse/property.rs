@@ -313,7 +313,20 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
             property_assignment,
             standalone_macro_property(),
             
-            // Handle trailing commas in macro expansions (common in engine_asset.hpp)
+            // Handle identifiers followed by trailing commas (from macro expansions)
+            choice((
+                macro_property_name(),
+                ident(),
+            ))
+                .padded()
+                .then_ignore(just(',').padded())
+                .map_with_span(|name, span: Range<usize>| Property::Entry {
+                    name,
+                    value: Value::Invalid(span),
+                    expected_array: false,
+                }),
+            
+            // Handle standalone trailing commas in macro expansions (common in engine_asset.hpp)
             just(',')
                 .padded()
                 .map_with_span(|_, span: Range<usize>| Property::Entry {

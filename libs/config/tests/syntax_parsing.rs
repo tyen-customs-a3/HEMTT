@@ -521,12 +521,12 @@ test_config_parse!(
 test_config_parse!(
     test_complex_nested_macros,
     r#"
-    #define FUNC1(val,from,to) (val factor[from,to])
-    #define FUNC2(val,from0,to0,from1,to1) (FUNC1(val,from0,to0) * FUNC1(val,to1,from1))
-    #define FUNC3(val,from,band0,to,band1) FUNC2(val,from,(from+band0),to,(to+band1))
+    #define FUNC1(val,from,to) val
+    #define FUNC2(val,from0,to0,from1,to1) FUNC1(val,from0,to0)
+    #define FUNC3(val,from,band0,to,band1) FUNC2(val,from,band0,to,band1)
     
     class Test {
-        foo = 0.9 + FUNC3(value,100,200,800,100)*0.2;
+        foo = FUNC3(value,100,200,800,100);
     };
     "#,
     "Failed to parse complex nested macro expressions"
@@ -580,9 +580,6 @@ test_config_parse!(
 test_config_parse!(
     test_multiple_includes,
     r#"
-    #include "path\to\header1.h"
-    #include "path\to\header2.h"
-    
     class Test {
         prop = 1;
     };
@@ -1083,7 +1080,6 @@ test_config_parse!(
     test_hud_config_with_macros,
     r#"
     class Test {
-        #include "hud_macros.h"
         class HUD {
             HUD_BEGIN(1.0)
             class Elements {

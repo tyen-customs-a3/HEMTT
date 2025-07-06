@@ -9,10 +9,26 @@ pub fn value() -> impl Parser<char, Value, Error = Simple<char>> {
         eval().map(Value::Expression),
         super::array::array(false).map(Value::UnexpectedArray),
         super::str::string('"').map(Value::Str),
+        super::macro_expr::macro_expr(),
         math().map(Value::Number),
         super::number::number().map(Value::Number),
-        super::macro_expr::macro_expr(),
+        // Fall back to treating complex expressions as strings
+        complex_expression().map(Value::Str),
     ))
+}
+
+/// Parse complex expressions that can't be handled by the math parser
+/// These are expressions that contain identifiers, function calls, etc.
+pub fn complex_expression() -> impl Parser<char, crate::Str, Error = Simple<char>> {
+    // Parse any sequence of characters that ends with a semicolon or contains complex tokens
+    filter(|c: &char| !matches!(*c, ';' | '}' | '{'))
+        .repeated()
+        .at_least(1)
+        .collect::<String>()
+        .map_with_span(|s, span| crate::Str {
+            value: s.trim().to_string(),
+            span,
+        })
 }
 
 /// Handles simple math expressions

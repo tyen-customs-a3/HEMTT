@@ -28,7 +28,11 @@ fn check(dir: &str) {
     let processed = Processor::run(&source);
     match processed {
         Ok(config) => {
-            panic!("`{:?}` should have failed: {:#?}", folder, config.as_str())
+            panic!(
+                "`{}` should have failed: {:#?}",
+                folder.display(),
+                config.as_str()
+            )
         }
         Err(e) => {
             let mut expected = Vec::new();
@@ -66,6 +70,8 @@ bootstrap!(pe10_function_as_value);
 bootstrap!(pe11_expected_function_or_value);
 bootstrap!(pe12_include_not_found);
 bootstrap!(pe13_include_not_encased);
+bootstrap!(pe13_include_not_encased_start_only);
+bootstrap!(pe13_include_not_encased_end_only);
 bootstrap!(pe14_include_unexpected_suffix);
 bootstrap!(pe15_if_invalid_operator);
 bootstrap!(pe16_if_incompatible_types);

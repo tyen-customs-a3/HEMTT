@@ -37,7 +37,7 @@ pub fn sort(cmd: &Command) -> Result<Report, Error> {
             .into_iter()
             .filter_map(|p| {
                 p.map(|p| {
-                    if p.file_name() == "stringtable.xml" {
+                    if p.file_name().eq_ignore_ascii_case("stringtable.xml") {
                         Some(p.path().to_path_buf())
                     } else {
                         None
@@ -55,7 +55,7 @@ pub fn sort(cmd: &Command) -> Result<Report, Error> {
                             project.sort();
                         }
                         let mut writer = String::new();
-                        if let Err(e) = project.to_writer(&mut writer) {
+                        if let Err(e) = project.to_writer(&mut writer, false) {
                             error!("Failed to write stringtable for {}", path.display());
                             error!("{:?}", e);
                             return Ok(Report::new());
@@ -71,7 +71,7 @@ pub fn sort(cmd: &Command) -> Result<Report, Error> {
                         error!("{:?}", e);
                         return Ok(Report::new());
                     }
-                };
+                }
             }
         }
     }

@@ -27,4 +27,14 @@ pub struct EnumDef {
     pub properties: Vec<Property>,
     /// The span of the enum definition
     pub span: Range<usize>,
-} 
+}
+
+impl std::fmt::Display for EnumDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "enum {{")?;
+        for property in &self.properties {
+            write!(f, "    {}", property)?;
+        }
+        write!(f, "}};")
+    }
+}

@@ -13,21 +13,22 @@ use tracing::{Level, debug, info};
 use crate::diag_manager::DiagManager;
 use crate::workspace::EditorWorkspaces;
 
+mod audio;
 mod color;
 mod config;
 mod diag_manager;
 mod files;
+mod p3d;
+mod paa;
 mod positions;
 mod preprocessor;
-pub mod sqf;
+mod sqf;
 mod workspace;
 
 #[derive(Clone, clap::Args)]
 pub struct Command {
     port: u16,
 }
-
-pub const LEGEND_TYPE: &[SemanticTokenType] = &[SemanticTokenType::FUNCTION];
 
 #[derive(Debug)]
 struct Backend {
@@ -51,31 +52,6 @@ impl LanguageServer for Backend {
                     }),
                     file_operations: None,
                 }),
-                semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
-                        SemanticTokensRegistrationOptions {
-                            text_document_registration_options: {
-                                TextDocumentRegistrationOptions {
-                                    document_selector: Some(vec![DocumentFilter {
-                                        language: Some("sqf".to_string()),
-                                        scheme: Some("file".to_string()),
-                                        pattern: None,
-                                    }]),
-                                }
-                            },
-                            semantic_tokens_options: SemanticTokensOptions {
-                                work_done_progress_options: WorkDoneProgressOptions::default(),
-                                legend: SemanticTokensLegend {
-                                    token_types: LEGEND_TYPE.into(),
-                                    token_modifiers: vec![],
-                                },
-                                range: Some(false),
-                                full: Some(SemanticTokensFullOptions::Bool(true)),
-                            },
-                            static_registration_options: StaticRegistrationOptions::default(),
-                        },
-                    ),
-                ),
                 signature_help_provider: Some(SignatureHelpOptions {
                     trigger_characters: Some(vec!["(".to_string()]),
                     retrigger_characters: Some(vec![",".to_string(), ")".to_string()]),
@@ -211,22 +187,6 @@ impl LanguageServer for Backend {
             .await)
     }
 
-    async fn semantic_tokens_full(
-        &self,
-        params: SemanticTokensParams,
-    ) -> Result<Option<SemanticTokensResult>> {
-        Ok(SqfAnalyzer::get()
-            .get_tokens(&params.text_document.uri)
-            .await
-            .map(|tokens| {
-                debug!("sending tokens: {}", tokens.len());
-                SemanticTokensResult::Tokens(SemanticTokens {
-                    data: tokens,
-                    ..Default::default()
-                })
-            }))
-    }
-
     async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
         Ok(PreprocessorAnalyzer::get().signature_help(&params).await)
     }
@@ -253,13 +213,6 @@ impl LanguageServer for Backend {
 impl Backend {
     async fn processed(&self, params: ProviderParams) -> Result<Option<Value>> {
         let Some(res) = PreprocessorAnalyzer::get().get_processed(params.url).await else {
-            return Ok(None);
-        };
-        Ok(Some(serde_json::to_value(res).unwrap()))
-    }
-
-    async fn compiled(&self, params: ProviderParams) -> Result<Option<Value>> {
-        let Some(res) = SqfAnalyzer::get().get_compiled(params.url).await else {
             return Ok(None);
         };
         Ok(Some(serde_json::to_value(res).unwrap()))
@@ -297,7 +250,7 @@ async fn server() {
     // second argument is the port
     let port = std::env::args().nth(1).expect("port is required");
 
-    let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+    let stream = TcpStream::connect(format!("127.0.0.1:{port}"))
         .await
         .unwrap();
 
@@ -306,8 +259,12 @@ async fn server() {
     let (read, write) = tokio::io::split(stream);
 
     let (service, socket) = LspService::build(|client| Backend { client })
+        .custom_method("hemtt/audio/convert", Backend::audio_convert)
+        .custom_method("hemtt/p3d/json", Backend::p3d_json)
+        .custom_method("hemtt/paa/json", Backend::paa_json)
+        .custom_method("hemtt/paa/p3d", Backend::paa_p3d)
         .custom_method("hemtt/processed", Backend::processed)
-        .custom_method("hemtt/compiled", Backend::compiled)
+        .custom_method("hemtt/sqf/compiled", Backend::sqf_compiled)
         .finish();
     Server::new(read, write, socket).serve(service).await;
 }

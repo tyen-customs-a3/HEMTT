@@ -6,7 +6,9 @@ use crate::Error;
 /// Convert UTF-8 with BOM to UTF-8 without BOM
 pub struct Command {}
 
-const ALLOWED_EXTENSIONS: [&str; 6] = ["sqf", "hpp", "cpp", "rvmat", "ext", "xml"];
+const ALLOWED_EXTENSIONS: [&str; 10] = [
+    "sqf", "hpp", "cpp", "rvmat", "ext", "sqm", "fsm", "bikb", "bisurf", "xml",
+];
 
 /// Execute the bom command
 ///
@@ -40,6 +42,7 @@ pub fn execute(_: &Command) -> Result<(), Error> {
                     file.read_to_end(&mut buf)?;
                     file.seek(std::io::SeekFrom::Start(0))?;
                     file.write_all(&buf)?;
+                    file.set_len(buf.len() as u64)?;
                     info!("Removed BOM from {}", path.display());
                     count += 1;
                 }

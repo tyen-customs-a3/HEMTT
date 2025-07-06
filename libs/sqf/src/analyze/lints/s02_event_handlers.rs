@@ -166,6 +166,7 @@ impl LintGroupRunner<LintData> for EventHandlerRunner {
         _project: Option<&ProjectConfig>,
         config: std::collections::HashMap<String, LintConfig>,
         processed: Option<&Processed>,
+        _runtime: &hemtt_common::config::RuntimeArguments,
         target: &Statements,
         data: &LintData,
     ) -> Codes {
@@ -197,7 +198,7 @@ impl LintGroupRunner<LintData> for EventHandlerRunner {
                     config.get("event_unknown"),
                 ));
                 codes.extend(check_version(
-                    &data.addon, &ns, &name, &id, &eh, processed, &data.database,
+                    data.addon.as_ref().expect("addon will exist"), &ns, &name, &id, &eh, processed, &data.database,
                 ));
             }
         }
@@ -531,7 +532,6 @@ impl CodeS02IncorrectCommand {
             alternatives: {
                 let mut alternatives = Vec::new();
                 for ns in namespaces {
-                    println!("Possible alternatives: {:?}", ns.commands());
                     ns.commands()
                         .iter()
                         .filter(|c| c.contains(&prefix))

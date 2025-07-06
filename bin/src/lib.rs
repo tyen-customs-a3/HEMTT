@@ -29,7 +29,7 @@ pub struct Cli {
     global: GlobalArgs,
 }
 
-#[derive(Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct GlobalArgs {
     #[arg(global = true, long, short)]
     /// Number of threads, defaults to # of CPUs
@@ -37,8 +37,7 @@ pub struct GlobalArgs {
     #[arg(global = true, short, action = clap::ArgAction::Count)]
     /// Verbosity level
     verbosity: u8,
-    #[cfg(debug_assertions)]
-    #[arg(global = true, long)]
+    #[arg(global = true, hide = true, long)]
     /// Directory to run in
     dir: Option<String>,
     #[cfg(debug_assertions)]
@@ -86,6 +85,10 @@ pub fn execute(cli: &Cli) -> Result<(), Error> {
         std::process::exit(1);
     }
 
+    if let Some(dir) = &cli.global.dir {
+        std::env::set_current_dir(dir).expect("Failed to set current directory");
+    }
+
     #[cfg(debug_assertions)]
     let in_test = cli.global.in_test;
     #[cfg(not(debug_assertions))]
@@ -101,12 +104,7 @@ pub fn execute(cli: &Cli) -> Result<(), Error> {
         )?;
     }
 
-    #[cfg(debug_assertions)]
-    if let Some(dir) = &cli.global.dir {
-        std::env::set_current_dir(dir).expect("Failed to set current directory");
-    }
-
-    check_for_update();
+    let update_thread = std::thread::spawn(check_for_update);
 
     trace!("version: {}", env!("HEMTT_VERSION"));
     trace!("platform: {}", std::env::consts::OS);
@@ -129,7 +127,7 @@ pub fn execute(cli: &Cli) -> Result<(), Error> {
         Commands::Book(cmd) => commands::book::execute(cmd),
         Commands::New(cmd) => commands::new::execute(cmd, in_test),
         Commands::Check(cmd) => commands::check::execute(cmd),
-        Commands::Dev(cmd) => commands::dev::execute(cmd, &[]).map(|(r, _)| r),
+        Commands::Dev(cmd) => commands::dev::execute(cmd, &[], false).map(|(r, _)| r),
         Commands::Launch(cmd) => commands::launch::execute(cmd),
         Commands::Build(cmd) => commands::build::execute(cmd),
         Commands::Release(cmd) => commands::release::execute(cmd),
@@ -160,6 +158,19 @@ pub fn execute(cli: &Cli) -> Result<(), Error> {
             std::process::exit(1);
         }
     }
+
+    match update_thread.join() {
+        Err(e) => {
+            error!("Failed to check for updates: {e:?}");
+        }
+        Ok(Some(lines)) => {
+            for line in lines {
+                tracing::info!("{}", line);
+            }
+        }
+        Ok(None) => {}
+    }
+
     Ok(())
 }
 
@@ -203,22 +214,30 @@ pub fn is_ci() -> bool {
     false
 }
 
-fn check_for_update() {
+/// Check for updates to HEMTT
+///
+/// # Returns
+/// If an update is available, a message to display to the user
+///
+/// # Panics
+/// If the user's home directory does not exist
+fn check_for_update() -> Option<Vec<String>> {
     if is_ci() {
-        return;
+        return None;
     }
+    let mut out = Vec::new();
     match update::check() {
         Ok(Some(version)) => {
-            info!("HEMTT {version} is available, please update");
+            out.push(format!("HEMTT {version} is available, please update"));
         }
         Err(e) => {
             error!("Failed to check for updates: {e}");
-            return;
+            return None;
         }
-        _ => return,
+        _ => return None,
     }
     let Ok(path) = std::env::current_exe() else {
-        return;
+        return Some(out);
     };
     trace!("HEMTT is installed at: {}", path.display());
     let os = std::env::consts::OS;
@@ -233,16 +252,17 @@ fn check_for_update() {
                 let mut home = dirs::home_dir().expect("home directory exists");
                 if os == "linux" {
                     home = home.join(".local");
-                };
+                }
                 home.join("bin").display().to_string()
             },
         ),
-        _ => return,
+        _ => return Some(out),
     };
 
     if path.display().to_string().contains(&filter) {
-        info!(message);
+        out.push(message.to_string());
     }
+    Some(out)
 }
 
 #[derive(clap::ValueEnum, Clone, Default, Debug, serde::Serialize)]

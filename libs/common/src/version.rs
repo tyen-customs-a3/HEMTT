@@ -86,6 +86,12 @@ impl Version {
         self.build
     }
 
+    /// Git hash
+    #[must_use]
+    pub fn hash(&self) -> Option<String> {
+        self.hash.clone()
+    }
+
     fn extract_version(lines: &[&str], component: &str) -> Result<u32, Error> {
         let error = match component {
             "MAJOR" => Error::ExpectedMajor,
@@ -205,10 +211,10 @@ impl Serialize for Version {
     {
         let mut version = format!("{}.{}.{}", self.major, self.minor, self.patch);
         if let Some(build) = self.build {
-            write!(version, ".{build}").unwrap();
+            write!(version, ".{build}").expect("should be able to write build number");
         }
         if let Some(hash) = &self.hash {
-            write!(version, "-{hash}").unwrap();
+            write!(version, "-{hash}").expect("should be able to write hash");
         }
         serializer.serialize_str(&version)
     }

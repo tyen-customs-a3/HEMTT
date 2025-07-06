@@ -7,7 +7,12 @@ use std::{
     },
 };
 
-use hemtt_config::{Config, analyze::lint_check, parse, rapify::Rapify};
+use hemtt_config::{
+    Config,
+    analyze::{lint_all, lint_check},
+    parse,
+    rapify::Rapify,
+};
 use hemtt_preprocessor::Processor;
 use hemtt_workspace::{
     WorkspacePath,
@@ -40,13 +45,15 @@ impl Module for Rapifier {
     fn name(&self) -> &'static str {
         "Rapifier"
     }
+    fn priority(&self) -> i32 {
+        2000
+    }
 
     fn check(&self, ctx: &Context) -> Result<Report, Error> {
         let mut report = Report::new();
-        let default_enabled = ctx.config().runtime().is_pedantic();
         report.extend(lint_check(
             ctx.config().lints().config().clone(),
-            default_enabled,
+            ctx.config().runtime().clone(),
         ));
         Ok(report)
     }
@@ -74,9 +81,7 @@ impl Module for Rapifier {
                     }
                 }
                 for entry in ctx.workspace_path().join(addon.folder())?.walk_dir()? {
-                    if entry.metadata()?.file_type == VfsFileType::File
-                        && can_rapify(entry.as_str())
-                    {
+                    if entry.metadata()?.file_type == VfsFileType::File && can_rapify(&entry)? {
                         if globs
                             .iter()
                             .any(|pat| pat.matches_with(entry.as_str(), glob_options))
@@ -108,6 +113,7 @@ impl Module for Rapifier {
 
         progress.finish_and_clear();
         info!("Rapified {} addon configs", counter.load(Ordering::Relaxed));
+        report.extend(lint_all(Some(ctx.config()), &ctx.addons().to_vec()));
         Ok(report)
     }
 }
@@ -137,17 +143,7 @@ pub fn rapify(addon: &Addon, path: &WorkspacePath, ctx: &Context) -> Result<Repo
             return Ok(report);
         }
     };
-    addon
-        .build_data()
-        .localizations()
-        .lock()
-        .expect("not poisoned")
-        .extend(
-            configreport
-                .localized()
-                .iter()
-                .map(|(s, p)| (s.to_owned(), p.clone())),
-        );
+    configreport.push_to_addon(addon);
     configreport.notes_and_helps().into_iter().for_each(|e| {
         report.push(e.clone());
     });
@@ -209,8 +205,9 @@ pub fn rapify(addon: &Addon, path: &WorkspacePath, ctx: &Context) -> Result<Repo
     Ok(report)
 }
 
-pub fn can_rapify(path: &str) -> bool {
-    let pathbuf = PathBuf::from(path);
+pub fn can_rapify(entry: &WorkspacePath) -> Result<bool, Error> {
+    let path = entry.as_str();
+    let pathbuf = PathBuf::from(&path);
     let ext = pathbuf
         .extension()
         .unwrap_or_else(|| std::ffi::OsStr::new(""))
@@ -222,5 +219,13 @@ pub fn can_rapify(path: &str) -> bool {
             path.trim_start_matches('/')
         );
     }
-    ["cpp", "rvmat", "ext"].contains(&ext)
+    if !["cpp", "rvmat", "ext", "sqm", "bikb", "bisurf"].contains(&ext) {
+        return Ok(false);
+    }
+    let mut buffer = vec![0; 4];
+    if entry.open_file()?.read_exact(&mut buffer).is_err() {
+        // The file is less than 4 bytes, so it is not rapified
+        return Ok(true);
+    }
+    Ok(buffer != b"\0raP")
 }

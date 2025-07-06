@@ -13,4 +13,6 @@ hemtt-common = { path = "../common" }
 hemtt-workspace = { path = "../workspace" }
 
 byteorder = { workspace = true }
+rustversion = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

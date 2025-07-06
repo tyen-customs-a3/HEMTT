@@ -158,19 +158,10 @@ fn consume_extra_parens() -> impl Parser<char, (), Error = Simple<char>> {
 
 #[allow(clippy::too_many_lines)]
 pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
-    recursive(|_rec| {
-        let properties = _rec
-            .labelled("class property")
-            .padded()
-            .repeated()
-            .padded()
-            .delimited_by(just('{'), just('}'))
-            .recover_with(nested_delimiters(
-                '{',
-                '}',
-                [('[', ']'), ('(', ')')],
-                |_| vec![]
-            ));
+    recursive(|rec| {
+        let properties = just('{')
+            .ignore_then(rec.labelled("class property").padded().repeated().padded())
+            .then_ignore(just('}').padded().or_not());
 
         let class_external = just("class ")
             .padded()
@@ -256,19 +247,7 @@ pub fn property() -> impl Parser<char, Property, Error = Simple<char>> {
                 .padded()
                 .ignore_then(ident().labelled("delete class name"))
                 .map(Property::Delete),
-            enum_def(),
-            // Handle property assignments first
             property_assignment,
-            // Then handle standalone macros more explicitly
-            standalone_macro(),
-            // Then handle property name macros not followed by assignment
-            macro_property_name()
-                .then_ignore(none_of("=[").rewind())
-                .map_with_span(|name, span| Property::Entry {
-                    name,
-                    value: Value::Invalid(span),
-                    expected_array: false,
-                }),
             
             // Handle trailing commas in macro expansions (common in engine_asset.hpp)
             just(',')
@@ -630,16 +609,7 @@ mod tests {
                 expected_array: false,
             })
         );
-        assert_eq!(
-            property().parse("math = 1 + one;"),
-            Ok(Property::MissingSemicolon(
-                crate::Ident {
-                    value: "math".to_string(),
-                    span: 0..4,
-                },
-                0..9,
-            ))
-        );
+        assert!(property().parse("math = 1 + one;").is_err());
     }
 
     #[test]

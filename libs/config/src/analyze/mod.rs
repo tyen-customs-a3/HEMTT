@@ -1,7 +1,11 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
-use hemtt_common::config::ProjectConfig;
+use hemtt_common::config::{ProjectConfig, RuntimeArguments};
 use hemtt_workspace::{
+    addons::{Addon, DefinedFunctions, MagazineWellInfo},
     lint::LintManager,
     lint_manager,
     position::Position,
@@ -18,6 +22,8 @@ pub mod lints {
 pub struct LintData {
     pub(crate) path: String,
     pub(crate) localizations: Arc<Mutex<Vec<(String, Position)>>>,
+    pub(crate) functions_defined: Arc<Mutex<DefinedFunctions>>,
+    pub(crate) magazine_well_info: Arc<Mutex<MagazineWellInfo>>,
 }
 
 lint_manager!(config, vec![]);
@@ -27,6 +33,8 @@ impl LintData {
         Self {
             path,
             localizations: Arc::new(Mutex::new(Vec::with_capacity(16))),
+            functions_defined: Arc::new(Mutex::new(HashSet::new())),
+            magazine_well_info: Arc::new(Mutex::new((Vec::new(), Vec::new()))),
         }
     }
     
@@ -40,6 +48,8 @@ impl LintData {
         Self {
             path,
             localizations: self.localizations.clone(),
+            functions_defined: self.functions_defined.clone(),
+            magazine_well_info: self.magazine_well_info.clone(),
         }
     }
 }
@@ -47,7 +57,7 @@ impl LintData {
 pub use cfgpatch::CfgPatch;
 pub use chumsky::ChumskyCode;
 
-use crate::{Array, Class, Config, Expression, Item, Number, Property, Str, Value, MacroExpression};
+use crate::{Array, Class, Config, Expression, Item, Number, Property, Str, Value, MacroExpression, EnumDef};
 
 /// Trait for analyzing objects with optimized implementations
 pub trait Analyze: Sized + 'static {
@@ -68,6 +78,8 @@ pub trait Analyze: Sized + 'static {
 impl Analyze for Str {}
 impl Analyze for Number {}
 impl Analyze for Expression {}
+impl Analyze for MacroExpression {}
+impl Analyze for EnumDef {}
 
 impl Analyze for Config {
     fn analyze(
@@ -105,13 +117,14 @@ impl Analyze for Class {
         codes.extend(match self {
             Self::External { .. } => Vec::new(),
             Self::Local { properties, .. } | Self::Root { properties, .. } => {
-                // Use optimized path construction
                 let data = if let Some(name) = self.name() {
                     data.with_child_path(&name.value)
                 } else {
                     LintData {
                         path: data.path.clone(),
                         localizations: data.localizations.clone(),
+                        functions_defined: data.functions_defined.clone(),
+                        magazine_well_info: data.magazine_well_info.clone(),
                     }
                 };
                 
@@ -138,10 +151,18 @@ impl Analyze for Property {
         let mut codes = Vec::with_capacity(4);
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
-            Self::Class(class) => class.analyze(data, project, processed, manager),
-            Self::Entry { .. } => Vec::new(),
-            Self::Delete(_) | Self::MissingSemicolon(_, _) => Vec::new(),
-            Self::Enum(_) => Vec::new(),
+            Self::Entry { value, .. } => {
+                let data = LintData {
+                    path: format!("{}.{}", data.path, self.name().value),
+                    localizations: data.localizations.clone(),
+                    functions_defined: data.functions_defined.clone(),
+                    magazine_well_info: data.magazine_well_info.clone(),
+                };
+                value.analyze(&data, project, processed, manager)
+            }
+            Self::Class(c) => c.analyze(data, project, processed, manager),
+            Self::Delete(_) | Self::MissingSemicolon(_, _) => vec![],
+            Self::Enum(e) => e.analyze(data, project, processed, manager),
         });
         codes
     }
@@ -217,20 +238,29 @@ impl Analyze for Item {
     }
 }
 
-impl Analyze for MacroExpression {
-    fn analyze(
-        &self,
-        data: &LintData,
-        project: Option<&ProjectConfig>,
-        processed: &Processed,
-        manager: &LintManager<LintData>,
-    ) -> Codes {
-        let mut codes = Vec::with_capacity(4 + self.args.len());
-        codes.extend(manager.run(data, project, Some(processed), self));
-        // Analyze macro arguments with pre-allocated capacity
-        for arg in &self.args {
-            codes.extend(arg.analyze(data, project, processed, manager));
-        }
-        codes
-    }
+#[must_use]
+#[allow(clippy::ptr_arg)]
+pub fn lint_all(project: Option<&ProjectConfig>, addons: &Vec<Addon>) -> Codes {
+    let mut manager = LintManager::new(
+        project.map_or_else(Default::default, |project| project.lints().config().clone()),
+        project.map_or_else(RuntimeArguments::default, |p| p.runtime().clone()),
+    );
+    let _e = manager.extend(
+        crate::analyze::CONFIG_LINTS
+            .iter()
+            .map(|l| (**l).clone())
+            .collect::<Vec<_>>(),
+    );
+
+    manager.run(
+        &LintData {
+            path: String::new(),
+            localizations: Arc::new(Mutex::new(vec![])),
+            functions_defined: Arc::new(Mutex::new(HashSet::new())),
+            magazine_well_info: Arc::new(Mutex::new((Vec::new(), Vec::new()))),
+        },
+        project,
+        None,
+        addons,
+    )
 }

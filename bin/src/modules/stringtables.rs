@@ -31,13 +31,15 @@ impl Module for Stringtables {
     fn name(&self) -> &'static str {
         "Stringtables"
     }
+    fn priority(&self) -> i32 {
+        4000
+    }
 
     fn check(&self, ctx: &crate::context::Context) -> Result<crate::report::Report, crate::Error> {
         let mut report = Report::new();
-        let default_enabled = ctx.config().runtime().is_pedantic();
         report.extend(lint_check(
             ctx.config().lints().stringtables().clone(),
-            default_enabled,
+            ctx.config().runtime().clone(),
         ));
         Ok(report)
     }

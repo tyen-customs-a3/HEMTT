@@ -8,24 +8,29 @@ use hemtt_sqf::analyze::{
         LintS02EventIncorrectCommand, LintS02EventInsufficientVersion, LintS02EventUnknown,
     },
 };
+use hemtt_stringtable::analyze::STRINGTABLE_LINTS;
 use hemtt_workspace::lint::{Lint, Lints};
 use mdbook::book::Chapter;
 
 pub fn run(chapter: &mut Chapter) {
     for item in &mut chapter.sub_items {
         if let mdbook::BookItem::Chapter(chapter) = item {
+            eprintln!("Processing chapter: {}", chapter.name);
             if chapter.name == "Config" {
                 config(chapter);
             }
             if chapter.name == "SQF" {
                 sqf(chapter);
             }
+            if chapter.name == "Stringtables" {
+                stringtables(chapter);
+            }
         }
     }
 }
 
 fn config(chapter: &mut Chapter) {
-    let mut output = String::from("# Lints - Conifg\n\n");
+    let mut output = String::from("# Lints - Config\n\n");
     let mut lint_text: Vec<(u32, String)> = Vec::new();
     for lint in CONFIG_LINTS.iter().filter(|l| l.display()) {
         lint_text.push((lint.sort(), get_text(&**lint, "L-C")));
@@ -55,6 +60,19 @@ fn sqf(chapter: &mut Chapter) {
         .collect::<Vec<_>>();
     for lint in lints {
         lint_text.push((lint.sort(), get_text(&lint, "L-S")));
+    }
+    lint_text.sort_by(|a, b| a.0.cmp(&b.0));
+    for (_, text) in lint_text {
+        output.push_str(&text);
+    }
+    chapter.content = output;
+}
+
+fn stringtables(chapter: &mut Chapter) {
+    let mut output = String::from("# Lints - Stringtables\n\n");
+    let mut lint_text: Vec<(u32, String)> = Vec::new();
+    for lint in STRINGTABLE_LINTS.iter().filter(|l| l.display()) {
+        lint_text.push((lint.sort(), get_text(&**lint, "L-L")));
     }
     lint_text.sort_by(|a, b| a.0.cmp(&b.0));
     for (_, text) in lint_text {

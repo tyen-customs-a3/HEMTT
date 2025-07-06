@@ -68,6 +68,7 @@ impl LintRunner<LintData> for StatementsRunner {
         _project: Option<&hemtt_common::config::ProjectConfig>,
         config: &LintConfig,
         processed: Option<&hemtt_workspace::reporting::Processed>,
+        _runtime: &hemtt_common::config::RuntimeArguments,
         target: &Self::Target,
         _data: &LintData,
     ) -> Codes {
@@ -108,7 +109,6 @@ impl LintRunner<LintData> for StatementsRunner {
             } else if let Expression::Variable(saved, new_saved_span) = exp {
                 if RESERVED.contains(&saved.as_str()) {
                     just_saved.replace((saved.to_string(), var.to_string(), new_saved_span.clone()));
-                    continue
                 }
             }
         }
@@ -131,6 +131,7 @@ impl LintRunner<LintData> for ExpressionRunner {
         _project: Option<&hemtt_common::config::ProjectConfig>,
         config: &LintConfig,
         processed: Option<&hemtt_workspace::reporting::Processed>,
+        _runtime: &hemtt_common::config::RuntimeArguments,
         target: &Self::Target,
         _data: &LintData,
     ) -> Codes {

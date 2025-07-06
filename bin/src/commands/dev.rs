@@ -63,7 +63,7 @@ pub struct DevArgs {
     /// Include all optional addon folders
     pub(crate) all_optionals: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, verbatim_doc_comment)]
-    /// Do not rapify (cpp, rvmat)
+    /// Do not rapify (cpp, rvmat, ext, sqm, bikb, bisurf)
     ///
     /// They will be copied directly into the PBO, not .bin version is created.
     pub(crate) no_rap: bool,
@@ -83,13 +83,17 @@ pub struct BinarizeArgs {
 ///
 /// # Errors
 /// [`Error`] depending on the modules
-pub fn execute(cmd: &Command, launch_optionals: &[String]) -> Result<(Report, Context), Error> {
+pub fn execute(
+    cmd: &Command,
+    launch_optionals: &[String],
+    force_binarize: bool,
+) -> Result<(Report, Context), Error> {
     let mut executor = context(
         &cmd.dev,
         &cmd.binarize,
         &cmd.just,
         launch_optionals,
-        false,
+        force_binarize,
         true,
     )?;
     executor.run().map(|r| (r, executor.into_ctx()))

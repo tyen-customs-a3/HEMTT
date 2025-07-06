@@ -38,7 +38,7 @@ impl Lint<LintData> for LintL02Usage {
         
 Configuration
 
-- **ignore**: Array of stringtable entries to ignore
+- **ignore**: Array of stringtable entries to ignore, supports regex or wildcards (`*`)
 - **ignore_missing**: Bool to ignore missing stringtables (still written to .hemttout when disabled)
 - **ignore_unused**: Bool to ignore missing stringtables (still written to .hemttout when disabled)
 - **ignore_duplicate**: Bool to ignore missing stringtables (still written to .hemttout when disabled)
@@ -69,6 +69,7 @@ impl LintRunner<LintData> for Runner {
         project: Option<&hemtt_common::config::ProjectConfig>,
         config: &hemtt_common::config::LintConfig,
         _processed: Option<&hemtt_workspace::reporting::Processed>,
+        _runtime: &hemtt_common::config::RuntimeArguments,
         target: &Vec<Project>,
         data: &LintData,
     ) -> Codes {
@@ -80,7 +81,7 @@ impl LintRunner<LintData> for Runner {
         let mut codes: Codes = Vec::new();
         let mut all = HashMap::new();
         for stringtable in target {
-            for (key, positions) in &stringtable.keys {
+            for (key, positions) in stringtable.keys() {
                 all.entry(key.to_lowercase())
                     .or_insert_with(Vec::new)
                     .extend(positions.clone());
@@ -137,8 +138,16 @@ impl LintRunner<LintData> for Runner {
         if let Some(toml::Value::Array(ignore)) = config.option("ignore") {
             for i in ignore {
                 let i_lower = i.as_str().map_or(String::new(), str::to_lowercase);
-                unused.retain(|s| *s != i_lower);
-                missing.retain(|sp| *sp.0 != i_lower);
+                if i_lower.contains('*') {
+                    let regex_pattern = &i_lower.replace('*', ".*");
+                    if let Ok(re) = Regex::new(&format!("^{regex_pattern}$")) {
+                        unused.retain(|s| !re.is_match(s));
+                        missing.retain(|sp| !re.is_match(&sp.0));
+                    }
+                } else {
+                    unused.retain(|s| *s != i_lower);
+                    missing.retain(|sp| *sp.0 != i_lower);
+                }
             }
         }
         let ignore_missing = config
@@ -161,7 +170,7 @@ impl LintRunner<LintData> for Runner {
 
 fn unused_codes(
     mut unused: Vec<String>,
-    all: &HashMap<String, Vec<crate::Position>>,
+    all: &HashMap<String, Vec<Position>>,
     ignore: bool,
 ) -> Codes {
     let _ = std::fs::remove_file(".hemttout/unused_stringtables.txt");
@@ -220,12 +229,12 @@ fn missing_codes(missing: &[(String, Position)], ignore: bool) -> Codes {
                 missing.len() as u64,
                 Severity::Warning,
             )));
-        };
+        }
     }
     codes
 }
 
-fn duplicate_codes(all: &HashMap<String, Vec<crate::Position>>, ignore: bool) -> Codes {
+fn duplicate_codes(all: &HashMap<String, Vec<Position>>, ignore: bool) -> Codes {
     let _ = std::fs::remove_file(".hemttout/duplicate_stringtables.txt");
     let mut codes: Codes = Vec::new();
     let duplicates = all

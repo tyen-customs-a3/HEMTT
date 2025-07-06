@@ -101,6 +101,7 @@ impl LintRunner<LintData> for Runner {
         _project: Option<&ProjectConfig>,
         config: &LintConfig,
         processed: Option<&Processed>,
+        _runtime: &hemtt_common::config::RuntimeArguments,
         target: &crate::Property,
         _data: &LintData,
     ) -> Vec<std::sync::Arc<dyn Code>> {
@@ -172,7 +173,7 @@ fn check_str(name: &str, value: &Str, allow_no_extension: bool, processed: &Proc
             return;
         }
         let ext = if value_str.contains('.') {
-            value_str.split('.').last().unwrap_or("")
+            value_str.split('.').next_back().unwrap_or("")
         } else {
             ""
         };

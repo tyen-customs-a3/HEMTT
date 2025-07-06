@@ -10,6 +10,7 @@ mod stringtables;
 
 pub mod archive;
 pub mod bom;
+pub mod fnl;
 pub mod hook;
 pub mod pbo;
 pub(crate) mod sign;
@@ -26,6 +27,10 @@ pub use stringtables::Stringtables;
 
 pub trait Module {
     fn name(&self) -> &'static str;
+    /// priority (lower goes first)
+    fn priority(&self) -> i32 {
+        0
+    }
     /// Executes the module's `init` phase
     ///
     /// # Errors

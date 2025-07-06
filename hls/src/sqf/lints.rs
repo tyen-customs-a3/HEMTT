@@ -116,6 +116,9 @@ async fn check_sqf(
                                 warn!("failed to get diagnostic");
                                 continue;
                             };
+                            if diag.labels.iter().all(|l| l.file().is_include()) {
+                                continue;
+                            }
                             let lsp_diag = diag.to_lsp(&workspace_files);
                             for (file, diag) in lsp_diag {
                                 lsp_diags.entry(file).or_insert_with(Vec::new).push(diag);
@@ -198,6 +201,14 @@ impl SqfAnalyzer {
             warn!("Failed to find workspace for {:?}", url);
             return;
         };
+        let Ok(url_workspacepath) = workspace.join_url(&url) else {
+            warn!(
+                "Failed to join URL {:?} in workspace {:?}",
+                url,
+                workspace.url()
+            );
+            return;
+        };
         let project_change = url.as_str().contains(".toml");
         let recheck_files = {
             let cache = Cache::get();
@@ -208,12 +219,14 @@ impl SqfAnalyzer {
                     if project_change {
                         return Some(path.clone());
                     }
-                    if bundle.sources.iter().any(|source| {
-                        workspace
-                            .join_url(&url)
-                            .map(|joined| joined == *source)
-                            .unwrap_or(false)
-                    }) {
+                    if path == &url_workspacepath
+                        || bundle.sources.iter().any(|source| {
+                            workspace
+                                .join_url(&url)
+                                .map(|joined| joined == *source)
+                                .unwrap_or(false)
+                        })
+                    {
                         Some(path.clone())
                     } else {
                         None

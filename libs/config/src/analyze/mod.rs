@@ -28,12 +28,38 @@ pub struct LintData {
 
 lint_manager!(config, vec![]);
 
+impl LintData {
+    pub fn new(path: String) -> Self {
+        Self {
+            path,
+            localizations: Arc::new(Mutex::new(Vec::new())),
+            functions_defined: Arc::new(Mutex::new(HashSet::new())),
+            magazine_well_info: Arc::new(Mutex::new((Vec::new(), Vec::new()))),
+        }
+    }
+    
+    /// Optimized path joining method
+    pub fn with_child_path(&self, name: &str) -> Self {
+        let mut path = String::with_capacity(self.path.len() + name.len() + 1);
+        path.push_str(&self.path);
+        path.push('/');
+        path.push_str(name);
+        
+        Self {
+            path,
+            localizations: self.localizations.clone(),
+            functions_defined: self.functions_defined.clone(),
+            magazine_well_info: self.magazine_well_info.clone(),
+        }
+    }
+}
+
 pub use cfgpatch::CfgPatch;
 pub use chumsky::ChumskyCode;
 
-use crate::{Array, Class, Config, Expression, Item, Number, Property, Str, Value};
+use crate::{Array, Class, Config, Expression, Item, Number, Property, Str, Value, MacroExpression, EnumDef, EnumEntry};
 
-/// Trait for rapifying objects
+/// Trait for analyzing objects
 pub trait Analyze: Sized + 'static {
     fn analyze(
         &self,
@@ -42,7 +68,7 @@ pub trait Analyze: Sized + 'static {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::new();
         codes.extend(manager.run(data, project, Some(processed), self));
         codes
     }
@@ -51,6 +77,49 @@ pub trait Analyze: Sized + 'static {
 impl Analyze for Str {}
 impl Analyze for Number {}
 impl Analyze for Expression {}
+impl Analyze for MacroExpression {}
+impl Analyze for EnumDef {
+    fn analyze(
+        &self,
+        data: &LintData,
+        project: Option<&ProjectConfig>,
+        processed: &Processed,
+        manager: &LintManager<LintData>,
+    ) -> Codes {
+        let mut codes = Vec::with_capacity(4 + self.entries().len());
+        codes.extend(manager.run(data, project, Some(processed), self));
+        codes.extend(
+            self.entries()
+                .iter()
+                .flat_map(|entry| entry.analyze(data, project, processed, manager)),
+        );
+        codes
+    }
+}
+
+impl Analyze for EnumEntry {
+    fn analyze(
+        &self,
+        data: &LintData,
+        project: Option<&ProjectConfig>,
+        processed: &Processed,
+        manager: &LintManager<LintData>,
+    ) -> Codes {
+        let mut codes = Vec::with_capacity(4);
+        codes.extend(manager.run(data, project, Some(processed), self));
+        
+        // Create a new data context for the enum entry
+        let entry_data = LintData {
+            path: format!("{}.{}", data.path, self.name().value),
+            localizations: data.localizations.clone(),
+            functions_defined: data.functions_defined.clone(),
+            magazine_well_info: data.magazine_well_info.clone(),
+        };
+        
+        codes.extend(self.value().analyze(&entry_data, project, processed, manager));
+        codes
+    }
+}
 
 impl Analyze for Config {
     fn analyze(
@@ -60,7 +129,8 @@ impl Analyze for Config {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::new();
+        
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(manager.run(data, project, Some(processed), &self.to_class()));
         codes.extend(
@@ -80,24 +150,27 @@ impl Analyze for Class {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::new();
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
-            Self::External { .. } => vec![],
+            Self::External { .. } => Vec::new(),
             Self::Local { properties, .. } | Self::Root { properties, .. } => {
-                let data = LintData {
-                    path: self.name().map_or_else(
-                        || data.path.clone(),
-                        |name| format!("{}/{}", data.path, name.value),
-                    ),
-                    localizations: data.localizations.clone(),
-                    functions_defined: data.functions_defined.clone(),
-                    magazine_well_info: data.magazine_well_info.clone(),
+                let data = if let Some(name) = self.name() {
+                    data.with_child_path(&name.value)
+                } else {
+                    LintData {
+                        path: data.path.clone(),
+                        localizations: data.localizations.clone(),
+                        functions_defined: data.functions_defined.clone(),
+                        magazine_well_info: data.magazine_well_info.clone(),
+                    }
                 };
-                properties
-                    .iter()
-                    .flat_map(|p| p.analyze(&data, project, processed, manager))
-                    .collect::<Vec<_>>()
+                
+                let mut property_codes = Vec::new();
+                for property in properties {
+                    property_codes.extend(property.analyze(&data, project, processed, manager));
+                }
+                property_codes
             }
         });
         codes
@@ -112,7 +185,7 @@ impl Analyze for Property {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::new();
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
             Self::Entry { value, .. } => {
@@ -126,6 +199,8 @@ impl Analyze for Property {
             }
             Self::Class(c) => c.analyze(data, project, processed, manager),
             Self::Delete(_) | Self::MissingSemicolon(_, _) => vec![],
+            Self::Enum(e) => e.analyze(data, project, processed, manager),
+            Self::Macro { .. } => vec![], // Macros don't need analysis at this level
         });
         codes
     }
@@ -139,7 +214,7 @@ impl Analyze for Value {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::new();
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
             Self::Str(s) => s.analyze(data, project, processed, manager),
@@ -148,9 +223,8 @@ impl Analyze for Value {
             Self::Array(a) | Self::UnexpectedArray(a) => {
                 a.analyze(data, project, processed, manager)
             }
-            Self::Invalid(_) => {
-                vec![]
-            }
+            Self::Macro(m) => m.analyze(data, project, processed, manager),
+            Self::Invalid(_) => Vec::new(),
         });
         codes
     }
@@ -164,7 +238,7 @@ impl Analyze for Array {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::new();
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(
             self.items
@@ -183,18 +257,20 @@ impl Analyze for Item {
         processed: &Processed,
         manager: &LintManager<LintData>,
     ) -> Codes {
-        let mut codes = vec![];
+        let mut codes = Vec::new();
         codes.extend(manager.run(data, project, Some(processed), self));
         codes.extend(match self {
             Self::Str(s) => s.analyze(data, project, processed, manager),
             Self::Number(n) => n.analyze(data, project, processed, manager),
-            Self::Array(a) => a
-                .iter()
-                .flat_map(|i| i.analyze(data, project, processed, manager))
-                .collect::<Vec<_>>(),
-            Self::Invalid(_) => {
-                vec![]
-            }
+            Self::Macro(m) => m.analyze(data, project, processed, manager),
+            Self::Array(a) => {
+                let mut array_codes = Vec::new();
+                for item in a {
+                    array_codes.extend(item.analyze(data, project, processed, manager));
+                }
+                array_codes
+            },
+            Self::Invalid(_) => Vec::new(),
         });
         codes
     }

@@ -2,3 +2,6 @@
 **/*.hpp linguist-vendored
 **/*.cpp linguist-vendored
 book/**/* linguist-vendored
+
+# Normalize line endings
+* text=auto eol=lf

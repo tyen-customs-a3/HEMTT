@@ -8,6 +8,7 @@ mod number;
 mod property;
 mod str;
 mod value;
+mod macro_expr;
 
 use std::io::Write;
 

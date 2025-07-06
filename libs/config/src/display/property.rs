@@ -29,6 +29,12 @@ impl std::fmt::Display for Property {
             Self::MissingSemicolon(_, _) => {
                 unreachable!()
             }
+            Self::Enum(enum_def) => {
+                write!(f, "{}", enum_def)
+            }
+            Self::Macro { expression, .. } => {
+                writeln!(f, "{};", expression)
+            }
         }
     }
 }

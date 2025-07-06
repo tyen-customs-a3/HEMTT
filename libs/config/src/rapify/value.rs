@@ -13,6 +13,7 @@ impl Rapify for Value {
             Self::Number(n) => n.rapify(output, offset),
             Self::Expression(e) => e.rapify(output, offset),
             Self::Array(a) => a.rapify(output, offset),
+            Self::Macro(m) => m.rapify(output, offset),
             Self::UnexpectedArray(_) | Self::Invalid(_) => unreachable!(),
         }?;
         assert_eq!(written, self.rapified_length());
@@ -25,6 +26,7 @@ impl Rapify for Value {
             Self::Number(n) => n.rapified_length(),
             Self::Expression(e) => e.rapified_length(),
             Self::Array(a) => a.rapified_length(),
+            Self::Macro(m) => m.rapified_length(),
             Self::UnexpectedArray(_) | Self::Invalid(_) => unreachable!(),
         }
     }
@@ -35,6 +37,7 @@ impl Rapify for Value {
             Self::Number(n) => n.rapified_code(),
             Self::Expression(e) => e.rapified_code(),
             Self::Array(a) => a.rapified_code(),
+            Self::Macro(m) => m.rapified_code(),
             Self::UnexpectedArray(_) | Self::Invalid(_) => unreachable!(),
         }
     }

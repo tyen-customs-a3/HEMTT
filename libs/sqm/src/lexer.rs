@@ -1,5 +1,4 @@
 use std::hash::{Hash, Hasher};
-use log::debug;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {

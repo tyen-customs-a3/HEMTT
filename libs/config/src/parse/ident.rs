@@ -3,8 +3,9 @@ use chumsky::prelude::*;
 use crate::Ident;
 
 pub fn ident() -> impl Parser<char, Ident, Error = Simple<char>> {
-    // Identifiers should start with a letter or underscore, then allow alphanumeric and underscore
-    filter(|c: &char| c.is_ascii_alphabetic() || *c == '_')
+    // Identifiers can start with a letter, underscore, or digit (for Arma 3 configs like "30Rnd_...")
+    // Then allow alphanumeric and underscore
+    filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_')
         .then(filter(|c: &char| c.is_ascii_alphanumeric() || *c == '_').repeated())
         .map(|(first, rest)| {
             let mut ident = first.to_string();
@@ -41,6 +42,14 @@ mod tests {
             Ok(Ident {
                 value: "abc_123".to_string(),
                 span: 0..7,
+            })
+        );
+        // Test numeric identifiers (common in Arma 3 configs)
+        assert_eq!(
+            super::ident().parse("30Rnd_9x21_Mag_SMG_02"),
+            Ok(Ident {
+                value: "30Rnd_9x21_Mag_SMG_02".to_string(),
+                span: 0..21,
             })
         );
     }
